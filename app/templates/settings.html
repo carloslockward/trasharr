@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>trasharr — Settings</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" />
+  <style>
+    :root { --bg:#111418; --card:#1c2128; --border:#2a2f38; --text:#e6e6e6; --muted:#8b94a3; --green:#2ea043; --red:#f85149; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; align-items:center; gap:16px; padding:14px 20px; background:#171a1f; border-bottom:1px solid var(--border); position:sticky; top:0; }
+    header h1 { font-size:18px; margin:0; }
+    header .spacer { flex:1; }
+    header a { color:var(--muted); text-decoration:none; font-size:13px; }
+    .wrap { max-width:820px; margin:0 auto; padding:24px 20px 60px; }
+    h2 { font-size:15px; margin:28px 0 12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; display:grid; gap:12px; }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .row label { font-size:12px; color:var(--muted); width:150px; }
+    .row.toggle input { transform:scale(1.1); }
+    input[type=text],input[type=password],input[type=url],input[type=number] { background:#0d0f12; border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:6px; font-size:13px; flex:1; min-width:180px; }
+    .btn { background:#2ea043; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn.subtle { background:#2b3138; color:var(--text); }
+    .btn.danger { background:#da3633; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:600; }
+    .hint { font-size:12px; color:var(--muted); margin-top:-4px; }
+    .flash { background:rgba(46,160,67,.12); color:#3fb950; padding:8px 12px; border-radius:6px; margin-bottom:16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗑 trasharr</h1>
+    <div class="spacer"></div>
+    <a href="{{ url_for('trasharr.index') }}">← Back to list</a>
+  </header>
+  <div class="wrap">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+
+    <h2>Services</h2>
+    <form method="POST" action="{{ url_for('trasharr.settings') }}">
+      {% for svc in ['qbittorrent','sonarr','radarr','jellyfin','prowlarr'] %}
+      <div class="card" style="margin-bottom:12px">
+        <div class="row toggle">
+          <label>{{ svc }} enabled</label>
+          <input type="checkbox" name="{{ svc }}_enabled" {% if config.data[svc].enabled %}checked{% endif %}>
+        </div>
+        <div class="row">
+          <label>Base URL</label>
+          <input type="url" name="{{ svc }}_base_url" value="{{ config.data[svc]['base_url'] }}" placeholder="http://{{ svc }}:PORT">
+        </div>
+        {% if svc == 'qbittorrent' %}
+          <div class="row"><label>Username</label><input type="text" name="qbittorrent_username" value="{{ config.data[svc]['username'] }}"></div>
+          <div class="row"><label>Password</label><input type="password" name="qbittorrent_password" value="{{ config.data[svc]['password'] }}"></div>
+        {% else %}
+          <div class="row"><label>API key</label><input type="text" name="{{ svc }}_api_key" value="{{ config.data[svc]['api_key'] }}"></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <div class="row"><label>cross-seed tag</label><input type="text" name="cross_seed_tag" value="{{ config.data['cross_seed_tag'] }}"></div>
+      <div class="row toggle"><label>Only show safe content</label><input type="checkbox" name="show_only_safe" {% if config.data['show_only_safe'] %}checked{% endif %}></div>
+      <div class="row"><button class="btn" type="submit">Save settings</button></div>
+    </form>
+
+    <h2>Per-tracker seeding limits</h2>
+    <p class="hint">How long / what ratio each private tracker requires before it is safe to delete. A value of 0 means "no requirement" on that axis. Matched by the tracker domain shown on the torrent.</p>
+    <table>
+      <thead><tr><th>Tracker domain</th><th>Ratio ≥</th><th>Seed time ≥ (min)</th><th></th></tr></thead>
+      <tbody>
+      {% for domain in config.tracker_domains() %}
+        {% set req = config.tracker_requirement(domain) %}
+        <tr>
+          <td>{{ domain }}</td>
+          <td>{{ req['target_ratio'] }}</td>
+          <td>{{ req['target_seed_time_minutes'] }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('trasharr.remove_tracker', domain=domain) }}">
+              <button class="btn danger" type="submit">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" style="color:var(--muted)">No trackers configured yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Add tracker</h2>
+    <form class="card" method="POST" action="{{ url_for('trasharr.add_tracker') }}">
+      <div class="row"><label>Tracker domain</label><input type="text" name="domain" placeholder="tracker.example.com" required></div>
+      <div class="row"><label>Target ratio</label><input type="number" name="target_ratio" step="0.01" min="0" value="0"></div>
+      <div class="row"><label>Target seed time (min)</label><input type="number" name="target_seed_time_minutes" step="1" min="0" value="0"></div>
+      <div class="row"><button class="btn" type="submit">Add tracker</button></div>
+    </form>
+
+    <h2>Configuration file</h2>
+    <p class="hint">{{ config.path }} — API keys and limits live in this JSON, which is git-ignored.</p>
+  </div>
+</body>
+</html>

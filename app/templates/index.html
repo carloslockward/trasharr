@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>trasharr</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" />
+  <style>
+    :root { --bg:#111418; --card:#1c2128; --border:#2a2f38; --text:#e6e6e6; --muted:#8b94a3; --green:#2ea043; --red:#f85149; --amber:#d29922; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; align-items:center; gap:16px; padding:14px 20px; background:#171a1f; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
+    header h1 { font-size:18px; margin:0; }
+    header .spacer { flex:1; }
+    header a { color:var(--muted); text-decoration:none; font-size:13px; }
+    .toolbar { display:flex; gap:12px; align-items:center; padding:14px 20px; flex-wrap:wrap; }
+    .toolbar label { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; cursor:pointer; }
+    .toolbar .count { font-size:13px; color:var(--muted); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; padding:0 20px 30px; }
+    .card { background:var(--card); border:2px solid var(--border); border-radius:8px; overflow:hidden; cursor:pointer; transition:border-color .12s; }
+    .card.selected { border-color:#58a6ff; }
+    .card .poster { width:100%; aspect-ratio:2/3; background:#0d0f12; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px; overflow:hidden; }
+    .card .poster img { width:100%; height:100%; object-fit:cover; }
+    .card .meta { padding:8px; }
+    .card .title { font-size:12px; font-weight:600; line-height:1.25; }
+    .card .year { font-size:11px; color:var(--muted); }
+    .card .status { font-size:11px; margin-top:6px; display:flex; flex-direction:column; gap:3px; }
+    .badge { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; }
+    .badge.ok { background:rgba(46,160,67,.18); color:#3fb950; }
+    .badge.no { background:rgba(248,81,73,.18); color:#f85149; }
+    .badge.warn { background:rgba(210,153,34,.18); color:#d29922; }
+    .ratio { color:var(--muted); }
+    .btn { background:#2ea043; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn:disabled { background:#3a3d42; color:#737b86; cursor:not-allowed; }
+    .btn.danger { background:#da3633; }
+    #notice { padding:10px 20px; font-size:13px; display:none; }
+    #notice.error { display:block; background:rgba(248,81,73,.12); color:#f85149; }
+    #notice.success { display:block; background:rgba(46,160,67,.12); color:#3fb950; }
+    .empty { text-align:center; color:var(--muted); padding:60px 20px; font-size:14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗑 trasharr</h1>
+    <div class="spacer"></div>
+    <a href="{{ url_for('trasharr.settings') }}">Settings</a>
+  </header>
+
+  <div id="notice"></div>
+
+  <div class="toolbar">
+    <span class="count" id="count"></span>
+    <label><input type="checkbox" id="showSafe" checked> safe to delete only</label>
+    <label><input type="checkbox" id="showUnsafe"> show still seeding</label>
+    <div class="spacer"></div>
+    <button class="btn danger" id="deleteBtn" disabled>Delete selected</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    let items = [];
+    const selected = new Set();
+    const grid = document.getElementById("grid");
+    const count = document.getElementById("count");
+    const showSafe = document.getElementById("showSafe");
+    const showUnsafe = document.getElementById("showUnsafe");
+    const deleteBtn = document.getElementById("deleteBtn");
+
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function render() {
+      selected.clear();
+      updateDeleteBtn();
+      const safeOnly = showSafe.checked;
+      const unsafeToo = showUnsafe.checked;
+      grid.innerHTML = "";
+      const visible = items.filter(i => {
+        if (safeOnly && !unsafeToo) return i.safe_to_delete;
+        if (unsafeToo) return true;
+        return true;
+      });
+      count.textContent = `${visible.length} shown${items.length ? ` / ${items.length} watched` : ""}`;
+      if (!visible.length) {
+        grid.innerHTML = '<div class="empty">No matching content. Set up services in Settings, then reload.</div>';
+        return;
+      }
+      for (const it of visible) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.key = `${it.arr}:${it.arr_id}`;
+        const st = it.safe_to_delete
+          ? '<span class="badge ok">safe to delete</span>'
+          : '<span class="badge no">still seeding</span>';
+        const seedInfo = it.torrents.map(t => {
+          const m = t.met ? 'ok' : 'no';
+          return `<span>${esc(t.tracker || "unknown")} — <span class="badge ${m}">${m === 'ok' ? 'complete' : 'seeding'}</span> <span class="ratio">ratio ${t.ratio}</span> · <span class="ratio">${t.seeding_time_minutes}min</span></span>`;
+        }).join("") || '<span class="ratio">no torrent matched</span>';
+        card.innerHTML = `
+          <div class="poster">${it.image_url
+            ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+            : esc(it.title[0] || "?")}</div>
+          <div class="meta">
+            <div class="title">${esc(it.title)}</div>
+            <div class="year">${esc(it.year || "")} · ${it.media_type}</div>
+            <div class="status">${st}${seedInfo}</div>
+          </div>`;
+        card.addEventListener("click", () => {
+          const k = card.dataset.key;
+          if (selected.has(k)) { selected.delete(k); card.classList.remove("selected"); }
+          else { selected.add(k); card.classList.add("selected"); }
+          updateDeleteBtn();
+        });
+        grid.appendChild(card);
+      }
+    }
+
+    function updateDeleteBtn() {
+      deleteBtn.disabled = selected.size === 0;
+      deleteBtn.textContent = selected.size ? `Delete selected (${selected.size})` : "Delete selected";
+    }
+
+    showSafe.addEventListener("change", render);
+    showUnsafe.addEventListener("change", render);
+
+    deleteBtn.addEventListener("click", async () => {
+      const selection = items
+        .filter(i => selected.has(`${i.arr}:${i.arr_id}`))
+        .map(i => ({ arr: i.arr, arr_id: i.arr_id }));
+      const ok = confirm("Delete selected content?\n\nThis removes media files, unmonitors on the arr, and removes the torrents (including cross-seed copies).");
+      if (!ok) return;
+      try {
+        const resp = await fetch("/api/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: selection }),
+        });
+        const data = await resp.json();
+        const notice = document.getElementById("notice");
+        if (data.ok) {
+          notice.className = "success";
+          notice.textContent = data.results.map(r => `${r.title}: ${r.message}`).join(" · ");
+        } else {
+          notice.className = "error";
+          notice.textContent = data.error || (data.results || []).map(r => `${r.title}: ${r.message}`).join(" · ");
+        }
+        setTimeout(() => { notice.className = ""; }, 6000);
+      } catch (e) {
+        document.getElementById("notice").className = "error";
+        document.getElementById("notice").textContent = String(e);
+      }
+    });
+
+    (async function load() {
+      try {
+        const resp = await fetch("/api/library");
+        const data = await resp.json();
+        items = data.items || [];
+      } catch (e) {
+        document.getElementById("notice").className = "error";
+        document.getElementById("notice").textContent = "Failed to load library: " + e;
+      }
+      render();
+    })();
+  </script>
+</body>
+</html>

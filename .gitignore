@@ -1,0 +1,13 @@
+__pycache__/
+.ruff_cache/
+*.pyc
+*.pyo
+.venv/
+venv/
+instance/
+
+# Local configuration holds API keys — never commit it.
+config.json
+config.json.*
+*.token
+.DS_Store
