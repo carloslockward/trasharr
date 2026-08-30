@@ -54,8 +54,9 @@
           <input type="url" name="{{ svc }}_base_url" value="{{ config.data[svc]['base_url'] }}" placeholder="http://{{ svc }}:PORT">
         </div>
         {% if svc == 'qbittorrent' %}
-          <div class="row"><label>Username</label><input type="text" name="qbittorrent_username" value="{{ config.data[svc]['username'] }}"></div>
-          <div class="row"><label>Password</label><input type="password" name="qbittorrent_password" value="{{ config.data[svc]['password'] }}"></div>
+          <div class="row"><label>API key (≥v5.2)</label><input type="text" name="qbittorrent_api_key" value="{{ config.data[svc]['api_key'] }}" placeholder="qbt_... (preferred)"></div>
+          <div class="row"><label>Username (fallback)</label><input type="text" name="qbittorrent_username" value="{{ config.data[svc]['username'] }}"></div>
+          <div class="row"><label>Password (fallback)</label><input type="password" name="qbittorrent_password" value="{{ config.data[svc]['password'] }}"></div>
         {% else %}
           <div class="row"><label>API key</label><input type="text" name="{{ svc }}_api_key" value="{{ config.data[svc]['api_key'] }}"></div>
         {% endif %}

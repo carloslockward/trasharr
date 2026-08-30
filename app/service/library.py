@@ -41,7 +41,12 @@ def make_clients(config: Config) -> ClientBundle:
     p = config.service("prowlarr")
     bundle: ClientBundle = {}
     if config.is_enabled("qbittorrent"):
-        bundle["qbt"] = QBittorrentClient(q.get("base_url", ""), q.get("username", ""), q.get("password", ""))
+        bundle["qbt"] = QBittorrentClient(
+            q.get("base_url", ""),
+            q.get("username", ""),
+            q.get("password", ""),
+            q.get("api_key", ""),
+        )
     if config.is_enabled("sonarr"):
         bundle["sonarr"] = SonarrClient(s.get("base_url", ""), s.get("api_key", ""))
     if config.is_enabled("radarr"):

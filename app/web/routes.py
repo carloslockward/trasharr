@@ -145,6 +145,7 @@ def settings():
             entry["enabled"] = form.get(f"{svc}_enabled") == "on"
             if svc == "qbittorrent":
                 entry["base_url"] = form.get("qbittorrent_base_url", "").strip()
+                entry["api_key"] = form.get("qbittorrent_api_key", "").strip()
                 entry["username"] = form.get("qbittorrent_username", "").strip()
                 entry["password"] = form.get("qbittorrent_password", "")
             else:

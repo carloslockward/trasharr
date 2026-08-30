@@ -2,6 +2,7 @@
   "qbittorrent": {
     "enabled": false,
     "base_url": "http://qbittorrent:8080",
+    "api_key": "qbt_...",
     "username": "admin",
     "password": ""
   },

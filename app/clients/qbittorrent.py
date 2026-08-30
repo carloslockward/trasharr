@@ -1,4 +1,19 @@
-"""qBittorrent Web API v2 client."""
+"""qBittorrent Web API v2 client.
+
+Two authentication modes:
+
+* API key (qBittorrent >= 5.2.0). A key generated in the WebUI (Web UI ->
+  API Key) is sent as ``Authorization: Bearer <key>`` on every request.
+  Stateless: no login round-trip, no password stored, and rotating the key
+  in qBittorrent immediately invalidates the old one. This is the preferred
+  mode. API keys cannot be used to fetch WebUI/static assets or the auth
+  endpoints, which trasharr does not need.
+* Username/password (older qBittorrent). A login posts credentials and the
+  returned SID cookie authorizes subsequent calls. trasharr logs in lazily
+  and refreshes the session once if a call comes back 403.
+
+If an API key is configured it takes precedence over username/password.
+"""
 
 from __future__ import annotations
 
@@ -11,19 +26,22 @@ logger = logging.getLogger(__name__)
 
 
 class QBittorrentClient(BaseClient):
-    """Thin wrapper around the qBittorrent Web UI API.
-
-    qBittorrent uses cookie-based auth: a login posts credentials and the
-    returned SID cookie authorizes subsequent calls. This client logs in
-    lazily and refreshes the session if a call comes back 403.
-    """
-
-    def __init__(self, base_url: str, username: str = "", password: str = "") -> None:
+    def __init__(self, base_url: str, username: str = "", password: str = "", api_key: str = "") -> None:
         super().__init__(base_url)
         self.username = username
         self.password = password
+        self.api_key = api_key.strip()
+        if self.api_key:
+            self.session.headers["Authorization"] = f"Bearer {self.api_key}"
+
+    @property
+    def uses_api_key(self) -> bool:
+        return bool(self.api_key)
 
     def login(self) -> bool:
+        """Cookie login; only used when no API key is configured."""
+        if self.uses_api_key:
+            return True
         data = {"username": self.username, "password": self.password}
         resp = self.session.post(self._url("/api/v2/auth/login"), data=data, timeout=REQUEST_TIMEOUT)
         if resp.status_code == 403:
@@ -43,10 +61,13 @@ class QBittorrentClient(BaseClient):
         return None
 
     def _authorized(self, method: str, path: str, **kwargs) -> Any:
+        if self.uses_api_key:
+            # Stateless: the Bearer header is already set; retry is pointless.
+            return self._request(method, path, **kwargs)
         try:
             return self._request(method, path, **kwargs)
         except ApiError as exc:
-            # Retry once on an expired session before propagating.
+            # Cookie auth: retry once on a 403 from an expired session.
             if "403" in str(exc):
                 self.session.cookies.clear()
                 if self.login():

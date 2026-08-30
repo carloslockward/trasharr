@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "qbittorrent": {
         "enabled": False,
         "base_url": "",
+        "api_key": "",
         "username": "",
         "password": "",
     },
