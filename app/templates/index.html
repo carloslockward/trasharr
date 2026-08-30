@@ -50,8 +50,7 @@
 
   <div class="toolbar">
     <span class="count" id="count"></span>
-    <label><input type="checkbox" id="showSafe" checked> safe to delete only</label>
-    <label><input type="checkbox" id="showUnsafe"> show still seeding</label>
+    <label><input type="checkbox" id="showStillSeeding"> also show items still seeding</label>
     <div class="spacer"></div>
     <button class="btn danger" id="deleteBtn" disabled>Delete selected</button>
   </div>
@@ -60,11 +59,11 @@
 
   <script>
     let items = [];
+    let diagnostics = [];
     const selected = new Set();
     const grid = document.getElementById("grid");
     const count = document.getElementById("count");
-    const showSafe = document.getElementById("showSafe");
-    const showUnsafe = document.getElementById("showUnsafe");
+    const showStillSeeding = document.getElementById("showStillSeeding");
     const deleteBtn = document.getElementById("deleteBtn");
 
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -72,17 +71,16 @@
     function render() {
       selected.clear();
       updateDeleteBtn();
-      const safeOnly = showSafe.checked;
-      const unsafeToo = showUnsafe.checked;
+      // Default (unchecked): only safe-to-delete. Checked: also show still-seeding.
+      const visible = items.filter(i => showStillSeeding.checked || i.safe_to_delete);
       grid.innerHTML = "";
-      const visible = items.filter(i => {
-        if (safeOnly && !unsafeToo) return i.safe_to_delete;
-        if (unsafeToo) return true;
-        return true;
-      });
       count.textContent = `${visible.length} shown${items.length ? ` / ${items.length} watched` : ""}`;
       if (!visible.length) {
-        grid.innerHTML = '<div class="empty">No matching content. Set up services in Settings, then reload.</div>';
+        const diagHtml = (diagnostics.length ? `<ul>${diagnostics.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : "");
+        grid.innerHTML = `<div class="empty">
+          <div>No matching content.</div>
+          ${diagHtml}
+        </div>`;
         return;
       }
       for (const it of visible) {
@@ -120,8 +118,7 @@
       deleteBtn.textContent = selected.size ? `Delete selected (${selected.size})` : "Delete selected";
     }
 
-    showSafe.addEventListener("change", render);
-    showUnsafe.addEventListener("change", render);
+    showStillSeeding.addEventListener("change", render);
 
     deleteBtn.addEventListener("click", async () => {
       const selection = items
@@ -156,7 +153,9 @@
         const resp = await fetch("/api/library");
         const data = await resp.json();
         items = data.items || [];
+        diagnostics = data.diagnostics || [];
       } catch (e) {
+        diagnostics = ["Failed to load library: " + e];
         document.getElementById("notice").className = "error";
         document.getElementById("notice").textContent = "Failed to load library: " + e;
       }

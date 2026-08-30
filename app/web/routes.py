@@ -77,11 +77,11 @@ def index():
 def api_library():
     config = _config()
     try:
-        items = load_items(config)
+        items, diag = load_items(config)
     except Exception as exc:
         logger.exception("build_index failed")
         return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "items": [_to_json(i) for i in items]})
+    return jsonify({"ok": True, "items": [_to_json(i) for i in items], "diagnostics": diag})
 
 
 @bp.route("/api/delete", methods=["POST"])
@@ -105,7 +105,8 @@ def api_delete():
     try:
         # Rebuild the full index so we can look up the real MediaItems server-side
         # rather than trusting the client-supplied ids.
-        items = {f"{i.arr}:{i.arr_id}": i for i in load_items(config, clients)}
+        items, _diag = load_items(config, clients)
+        items = {f"{i.arr}:{i.arr_id}": i for i in items}
         selected = [items[f"{s['arr']}:{s['arr_id']}"] for s in selections if f"{s['arr']}:{s['arr_id']}" in items]
     except Exception as exc:
         logger.exception("could not rebuild index for delete")

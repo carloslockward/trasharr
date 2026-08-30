@@ -100,8 +100,8 @@ class MediaItem:
 
 
 def _normalize_title(title: Any) -> str:
-    """Lowercase, collapse whitespace/punctuation for fuzzy-but-safe matching."""
-    s = re.sub(r"[^a-z0-9]+", " ", str(title or "")).strip().lower()
+    """Lowercase and collapse punctuation/whitespace; keep alphanumerics + spaces."""
+    s = re.sub(r"[^a-z0-9]+", " ", str(title or "").lower()).strip()
     return s
 
 

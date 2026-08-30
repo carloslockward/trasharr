@@ -65,11 +65,11 @@
 
       <div class="row"><label>cross-seed tag</label><input type="text" name="cross_seed_tag" value="{{ config.data['cross_seed_tag'] }}"></div>
       <div class="row toggle"><label>Only show safe content</label><input type="checkbox" name="show_only_safe" {% if config.data['show_only_safe'] %}checked{% endif %}></div>
-      <div class="row"><button class="btn" type="submit">Save settings</button></div>
+      <div class="row"><button class="btn" type="submit">Save service settings</button></div>
     </form>
 
     <h2>Per-tracker seeding limits</h2>
-    <p class="hint">How long / what ratio each private tracker requires before it is safe to delete. A value of 0 means "no requirement" on that axis. Matched by the tracker domain shown on the torrent.</p>
+    <p class="hint">How long / what ratio each private tracker requires before it is safe to delete. A value of 0 means "no requirement" on that axis. Matched by the tracker domain shown on the torrent. Changes save immediately when you Add or Remove below.</p>
     <table>
       <thead><tr><th>Tracker domain</th><th>Ratio ≥</th><th>Seed time ≥ (min)</th><th></th></tr></thead>
       <tbody>

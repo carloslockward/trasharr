@@ -58,50 +58,66 @@ def make_clients(config: Config) -> ClientBundle:
     return bundle
 
 
-def load_items(config: Config, clients: ClientBundle | None = None) -> list[MediaItem]:
-    """Fetch all watched content and evaluate seeding status."""
+def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[list[MediaItem], list[str]]:
+    """Fetch all watched content and evaluate seeding status.
+
+    Returns ``(items, diagnostics)`` — diagnostics is a list of human-readable
+    strings describing what was fetched (and any per-service errors), so an
+    empty result is explainable rather than a silent mystery.
+    """
+    diag: list[str] = []
     clients = clients or make_clients(config)
     qbt: Optional[QBittorrentClient] = clients.get("qbt")
     sonarr: Optional[SonarrClient] = clients.get("sonarr")
     radarr: Optional[RadarrClient] = clients.get("radarr")
     jellyfin: Optional[JellyfinClient] = clients.get("jellyfin")
 
+    if not qbt:
+        diag.append("qBittorrent is not enabled or has no base URL set.")
+    if not jellyfin:
+        diag.append("Jellyfin is not enabled or has no base URL set.")
     if not qbt or not jellyfin:
-        logger.warning("qbittorrent and jellyfin must be enabled to build the list.")
+        diag.append("Both qBittorrent and Jellyfin must be enabled to build the list.")
         if qbt:
             qbt.close()
-        return []
+        return [], diag
 
     try:
         if qbt:
             qbt.login()
 
-        # Fetch everything needed; tolerate a service that is disabled/misconfigured.
-        sonarr_history = []
-        radarr_history = []
-        radarr_movies = []
-        sonarr_series = []
-        watched_movies = []
-        watched_series = []
+        sonarr_history: list = []
+        radarr_history: list = []
+        radarr_movies: list = []
+        sonarr_series: list = []
+        watched_movies: list = []
+        watched_series: list = []
 
         if sonarr:
             try:
                 sonarr_history = sonarr.history(event_type=1)
                 sonarr_series = sonarr.series()
+                diag.append(f"Sonarr: {len(sonarr_series)} series, {len(sonarr_history)} grab records.")
             except Exception as exc:
-                logger.warning("Sonarr fetch failed: %s", exc)
+                diag.append(f"Sonarr fetch failed: {exc}")
         if radarr:
             try:
                 radarr_history = radarr.history(event_type=1)
                 radarr_movies = radarr.movies()
+                diag.append(f"Radarr: {len(radarr_movies)} movies, {len(radarr_history)} grab records.")
             except Exception as exc:
-                logger.warning("Radarr fetch failed: %s", exc)
+                diag.append(f"Radarr fetch failed: {exc}")
         if jellyfin:
             try:
                 watched_movies = jellyfin.watched_movies()
-                watched_series = jellyfin.watched_series()
+                diag.append(f"Jellyfin: {len(watched_movies)} watched movies.")
             except Exception as exc:
-                logger.warning("Jellyfin fetch failed: %s", exc)
+                diag.append(f"Jellyfin movies fetch failed: {exc}")
+            try:
+                watched_series = jellyfin.watched_series()
+                diag.append(f"Jellyfin: {len(watched_series)} watched series.")
+            except Exception as exc:
+                diag.append(f"Jellyfin series fetch failed: {exc}")
 
         items = build_index(
             qbt=qbt,
@@ -113,7 +129,8 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> list[Medi
             watched_movies=watched_movies,
             watched_series=watched_series,
         )
-        return items
+        diag.append(f"Matched {len(items)} watched item(s) to torrents.")
+        return items, diag
     finally:
         if qbt:
             qbt.close()
