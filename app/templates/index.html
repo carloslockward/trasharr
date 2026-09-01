@@ -13,23 +13,57 @@
     header h1 { font-size:18px; margin:0; }
     header .spacer { flex:1; }
     header a { color:var(--muted); text-decoration:none; font-size:13px; }
+    .icon-btn { background:none; border:1px solid var(--border); color:var(--muted); width:30px; height:30px; border-radius:6px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; }
+    .icon-btn:hover { color:var(--text); border-color:var(--muted); }
+    .icon-btn.spin { color:var(--text); border-color:var(--muted); }
+    .icon-btn.spin .icon { animation:spin .8s linear infinite; display:inline-block; }
     .toolbar { display:flex; gap:12px; align-items:center; padding:14px 20px; flex-wrap:wrap; }
-    .toolbar label { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; cursor:pointer; }
     .toolbar .count { font-size:13px; color:var(--muted); }
+    .sort-select { background:#0d0f12; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; }
+    /* Apple-style switch */
+    .switch-row { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+    .switch-row .switch-label { font-size:13px; color:var(--muted); }
+    .switch { position:relative; width:40px; height:24px; flex:none; }
+    .switch input { opacity:0; width:0; height:0; }
+    .slider { position:absolute; inset:0; background:#3a3d42; border-radius:24px; transition:background .18s; }
+    .slider::before { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:transform .18s; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+    .switch input:checked + .slider { background:var(--green); }
+    .switch input:checked + .slider::before { transform:translateX(16px); }
+    .switch input:focus-visible + .slider { outline:2px solid #58a6ff; outline-offset:2px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; padding:0 20px 30px; }
-    .card { background:var(--card); border:2px solid var(--border); border-radius:8px; overflow:hidden; cursor:pointer; transition:border-color .12s; }
+    .card { background:var(--card); border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:border-color .12s; position:relative; }
+    .card .poster { width:100%; aspect-ratio:2/3; background:#0d0f12; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:28px; overflow:hidden; border-radius:6px 6px 0 0; }
     .card.selected { border-color:#58a6ff; }
-    .card .poster { width:100%; aspect-ratio:2/3; background:#0d0f12; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px; overflow:hidden; }
-    .card .poster img { width:100%; height:100%; object-fit:cover; }
-    .card .meta { padding:8px; }
+    .card .poster img { width:100%; height:100%; object-fit:cover; display:block; }
+    .card .meta { padding:8px 10px 10px; }
     .card .title { font-size:12px; font-weight:600; line-height:1.25; }
-    .card .year { font-size:11px; color:var(--muted); }
-    .card .status { font-size:11px; margin-top:6px; display:flex; flex-direction:column; gap:3px; }
+    .card .year { font-size:11px; color:var(--muted); margin-top:1px; }
+    /* per-tracker rollup rows */
+    .tracker-rows { margin-top:8px; display:flex; flex-direction:column; gap:5px; }
+    .trow { font-size:10.5px; color:var(--muted); }
+    .trow .tname { display:block; color:var(--text); font-weight:600; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bar { height:4px; border-radius:2px; background:#0d0f12; margin-top:3px; overflow:hidden; }
+    .bar > div { height:100%; border-radius:2px; }
+    .bar .done { background:var(--green); }
+    .bar .part { background:var(--amber); }
+    .trow .pct { float:right; }
+    .trow.ok .tname { color:#3fb950; }
+    /* hover detail card */
+    .detail { display:none; position:absolute; z-index:30; top:0; left:calc(100% + 8px); width:320px; background:#171b21; border:1px solid #3a4150; border-radius:10px; padding:12px 14px; box-shadow:0 8px 28px rgba(0,0,0,.55); cursor:default; }
+    .card:hover .detail { display:block; }
+    .detail h4 { margin:0 0 8px; font-size:13px; }
+    .detail .sub { font-size:11px; color:var(--muted); margin-bottom:10px; }
+    .detail .drow { display:flex; justify-content:space-between; gap:10px; font-size:11px; padding:4px 0; border-bottom:1px solid #232933; }
+    .detail .drow:last-child { border-bottom:none; }
+    .detail .dname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px; }
+    .detail .dmeta { color:var(--muted); white-space:nowrap; }
+    .detail .dmeta .ok { color:#3fb950; }
+    .detail .dmeta .no { color:#f85149; }
     .badge { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; }
     .badge.ok { background:rgba(46,160,67,.18); color:#3fb950; }
     .badge.no { background:rgba(248,81,73,.18); color:#f85149; }
     .badge.warn { background:rgba(210,153,34,.18); color:#d29922; }
-    .ratio { color:var(--muted); }
+    .card .corner { position:absolute; top:6px; left:6px; z-index:5; }
     .btn { background:#2ea043; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; }
     .btn:disabled { background:#3a3d42; color:#737b86; cursor:not-allowed; }
     .btn.danger { background:#da3633; }
@@ -37,12 +71,16 @@
     #notice.error { display:block; background:rgba(248,81,73,.12); color:#f85149; }
     #notice.success { display:block; background:rgba(46,160,67,.12); color:#3fb950; }
     .empty { text-align:center; color:var(--muted); padding:60px 20px; font-size:14px; }
+    .loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:80px 20px; color:var(--muted); font-size:14px; }
+    .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:#58a6ff; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
   </style>
 </head>
 <body>
   <header>
     <h1>🗑 trasharr</h1>
     <div class="spacer"></div>
+    <button class="icon-btn" id="refreshBtn" title="Refresh library"><span class="icon">⟳</span></button>
     <a href="{{ url_for('trasharr.settings') }}">Settings</a>
   </header>
 
@@ -50,14 +88,45 @@
 
   <div class="toolbar">
     <span class="count" id="count"></span>
-    <label><input type="checkbox" id="showStillSeeding"> also show items still seeding</label>
+    <label class="switch-row">
+      <span class="switch-label">also show items still seeding</span>
+      <span class="switch">
+        <input type="checkbox" id="showStillSeeding" />
+        <span class="slider"></span>
+      </span>
+    </label>
+    <select id="sortSelect" class="sort-select" title="Sort by">
+      <option value="name">Sort: name</option>
+      <option value="seed_time">Sort: seed time</option>
+    </select>
+    <button class="icon-btn" id="sortDirBtn" title="Toggle sort direction">↓</button>
     <div class="spacer"></div>
     <button class="btn danger" id="deleteBtn" disabled>Delete selected</button>
   </div>
 
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div>Loading library…</div>
+    </div>
+  </div>
 
   <script>
+    const CACHE_KEY = "trasharr.library.v1";
+    const PREFS_KEY = "trasharr.view.v1";
+    // View preferences (sort field, direction, still-seeding toggle) persist
+    // across reloads and navigation via localStorage.
+    const prefs = (() => {
+      try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; }
+      catch { return {}; }
+    })();
+    function savePrefs() {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        sort: sortSelect.value,
+        desc: sortDesc,
+        showStillSeeding: showStillSeeding.checked,
+      }));
+    }
     let items = [];
     let diagnostics = [];
     const selected = new Set();
@@ -65,45 +134,139 @@
     const count = document.getElementById("count");
     const showStillSeeding = document.getElementById("showStillSeeding");
     const deleteBtn = document.getElementById("deleteBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const sortSelect = document.getElementById("sortSelect");
+    const sortDirBtn = document.getElementById("sortDirBtn");
+    // Restore persisted prefs before first render.
+    if (prefs.sort === "name" || prefs.sort === "seed_time") sortSelect.value = prefs.sort;
+    sortDesc = prefs.desc !== undefined ? !!prefs.desc : true;
+    sortDirBtn.textContent = sortDesc ? "↓" : "↑";
+    if (prefs.showStillSeeding !== undefined) showStillSeeding.checked = !!prefs.showStillSeeding;
 
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // Sort key: the item's WORST torrent's seed time (the number shown on the
+    // card's rollup), not the sum — a series with 18 episodes of the same age
+    // isn't "18x more seeded" than a single-torrent movie.
+    function maxSeedMinutes(it) {
+      return it.torrents.reduce((acc, t) => Math.max(acc, Number(t.seeding_time_minutes) || 0), 0);
+    }
+
+    function sortVisible(list) {
+      const copy = [...list];
+      let cmp;
+      if (sortSelect.value === "seed_time") {
+        cmp = (a, b) => maxSeedMinutes(a) - maxSeedMinutes(b);
+      } else {
+        cmp = (a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: "base" });
+      }
+      copy.sort(cmp);
+      if (sortDesc) copy.reverse();
+      return copy;
+    }
+
+    function fmtRatio(r) { return (Number(r) || 0).toFixed(2); }
+    function fmtMinutes(min) {
+      const m = Math.round(Number(min) || 0);
+      if (m < 60) return `${m}m`;
+      const h = Math.floor(m / 60);
+      if (h < 48) return `${h}h`;
+      return `${Math.floor(h / 24)}d`;
+    }
+
+    // Roll torrents up per tracker: the deletion gate is "every torrent met",
+    // so each tracker row shows its WORST torrent's progress vs target.
+    // Cross-seed copies (never downloaded from their tracker) always count as
+    // met and get their own "cross-seed" grouping.
+    // The API merges each torrent's evaluation fields into the torrent object.
+    function trackerRollup(it) {
+      const byTracker = new Map();
+      for (const t of it.torrents) {
+        const key = t.cross_seed ? "cross-seed" : (t.tracker || "unknown");
+        const cur = byTracker.get(key) || { name: key, met: true, progress: 1, entries: [], cross: t.cross_seed };
+        cur.entries.push(t);
+        const p = Math.max(
+          t.target_ratio > 0 ? Math.min(1, (t.ratio || 0) / t.target_ratio) : 0,
+          t.target_time_minutes > 0 ? Math.min(1, (t.seeding_time_minutes || 0) / t.target_time_minutes) : 0
+        );
+        if (!t.met) cur.met = false;
+        cur.progress = Math.min(cur.progress, p || 0);
+        byTracker.set(key, cur);
+      }
+      return [...byTracker.values()];
+    }
+
+    function trackerLabel(r) {
+      const anyTarget = r.entries.some(t => t.target_ratio > 0 || t.target_time_minutes > 0);
+      if (!anyTarget || r.met) return null; // no requirement / already complete
+      const t = r.entries.find(x => !x.met) || r.entries[0];
+      if (t.target_time_minutes > 0) return `${fmtMinutes(t.seeding_time_minutes)} / ${fmtMinutes(t.target_time_minutes)}`;
+      return `${fmtRatio(t.ratio)} / ${fmtRatio(t.target_ratio)}`;
+    }
+
+    function barColor(r) {
+      if (r.met) return "done";
+      return r.progress >= 0.99 ? "done" : "part";
+    }
 
     function render() {
       selected.clear();
       updateDeleteBtn();
-      // Default (unchecked): only safe-to-delete. Checked: also show still-seeding.
-      const visible = items.filter(i => showStillSeeding.checked || i.safe_to_delete);
+      const visible = sortVisible(items.filter(i => showStillSeeding.checked || i.safe_to_delete));
       grid.innerHTML = "";
-      count.textContent = `${visible.length} shown${items.length ? ` / ${items.length} watched` : ""}`;
+      count.textContent = `${visible.length} shown / ${items.length} with torrents`;
       if (!visible.length) {
         const diagHtml = (diagnostics.length ? `<ul>${diagnostics.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : "");
-        grid.innerHTML = `<div class="empty">
-          <div>No matching content.</div>
-          ${diagHtml}
-        </div>`;
+        grid.innerHTML = `<div class="empty"><div>No matching content.</div>${diagHtml}</div>`;
         return;
       }
       for (const it of visible) {
         const card = document.createElement("div");
         card.className = "card";
         card.dataset.key = `${it.arr}:${it.arr_id}`;
-        const st = it.safe_to_delete
+
+        const rollup = trackerRollup(it);
+        const rows = rollup.map(r => {
+          const pct = r.met ? 100 : Math.round(r.progress * 100);
+          const label = r.met ? "complete" : trackerLabel(r);
+          return `<div class="trow ${r.met ? "ok" : ""}">
+            <span class="pct">${r.met ? "✓" : `${pct}%`}</span>
+            <span class="tname" title="${esc(r.name)}">${esc(r.name)}</span>
+            ${label ? `<div class="bar"><div class="${barColor(r)}" style="width:${pct}%"></div></div><span>${esc(label)}</span>` : `<div class="bar"><div class="done" style="width:100%"></div></div>`}
+          </div>`;
+        }).join("") || '<div class="trow">no torrent matched</div>';
+
+        const detailRows = it.torrents.map((t) => {
+          const m = t.met ? "ok" : "no";
+          const tag = t.cross_seed ? " · cross-seed" : "";
+          return `<div class="drow">
+            <span class="dname" title="${esc(t.name || "")}">${esc(t.name || t.hash || "?")}</span>
+            <span class="dmeta"><span class="${m}">${t.met ? "✓" : "seeding"}</span>${tag}
+              ${fmtRatio(t.ratio)}${t.target_ratio > 0 ? `/${fmtRatio(t.target_ratio)}` : ""} · ${fmtMinutes(t.seeding_time_minutes)}${t.target_time_minutes > 0 ? `/${fmtMinutes(t.target_time_minutes)}` : ""}</span>
+          </div>`;
+        }).join("");
+
+        const badge = it.safe_to_delete
           ? '<span class="badge ok">safe to delete</span>'
-          : '<span class="badge no">still seeding</span>';
-        const seedInfo = it.torrents.map(t => {
-          const m = t.met ? 'ok' : 'no';
-          return `<span>${esc(t.tracker || "unknown")} — <span class="badge ${m}">${m === 'ok' ? 'complete' : 'seeding'}</span> <span class="ratio">ratio ${t.ratio}</span> · <span class="ratio">${t.seeding_time_minutes}min</span></span>`;
-        }).join("") || '<span class="ratio">no torrent matched</span>';
+          : '<span class="badge warn">still seeding</span>';
+
         card.innerHTML = `
           <div class="poster">${it.image_url
-            ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+            ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${esc(it.title[0] || "?")}';this.remove()">`
             : esc(it.title[0] || "?")}</div>
+          <div class="corner">${badge}</div>
+          <div class="detail">
+            <h4>${esc(it.title)}</h4>
+            <div class="sub">${esc(it.year || "")} · ${it.media_type} · ${it.torrents.length} torrent(s)</div>
+            ${detailRows}
+          </div>
           <div class="meta">
             <div class="title">${esc(it.title)}</div>
             <div class="year">${esc(it.year || "")} · ${it.media_type}</div>
-            <div class="status">${st}${seedInfo}</div>
+            <div class="tracker-rows">${rows}</div>
           </div>`;
-        card.addEventListener("click", () => {
+        card.addEventListener("click", (e) => {
+          if (e.target.closest(".detail")) return; // clicking inside hover card doesn't select
           const k = card.dataset.key;
           if (selected.has(k)) { selected.delete(k); card.classList.remove("selected"); }
           else { selected.add(k); card.classList.add("selected"); }
@@ -111,6 +274,21 @@
         });
         grid.appendChild(card);
       }
+      // Flip the hover card to the left when a card is near the right edge of
+      // the viewport, so the detail never overflows off-screen.
+      const flip = () => {
+        for (const card of grid.children) {
+          const detail = card.querySelector(".detail");
+          if (!detail) continue;
+          const r = card.getBoundingClientRect();
+          detail.style.left = "auto";
+          detail.style.right = "auto";
+          if (r.right + 336 > window.innerWidth) detail.style.right = "calc(100% + 8px)";
+          else detail.style.left = "calc(100% + 8px)";
+        }
+      };
+      flip();
+      window.addEventListener("resize", flip, { once: true });
     }
 
     function updateDeleteBtn() {
@@ -118,7 +296,14 @@
       deleteBtn.textContent = selected.size ? `Delete selected (${selected.size})` : "Delete selected";
     }
 
-    showStillSeeding.addEventListener("change", render);
+    showStillSeeding.addEventListener("change", () => { savePrefs(); render(); });
+    sortSelect.addEventListener("change", () => { savePrefs(); render(); });
+    sortDirBtn.addEventListener("click", () => {
+      sortDesc = !sortDesc;
+      sortDirBtn.textContent = sortDesc ? "↓" : "↑";
+      savePrefs();
+      render();
+    });
 
     deleteBtn.addEventListener("click", async () => {
       const selection = items
@@ -126,41 +311,85 @@
         .map(i => ({ arr: i.arr, arr_id: i.arr_id }));
       const ok = confirm("Delete selected content?\n\nThis removes media files, unmonitors on the arr, and removes the torrents (including cross-seed copies).");
       if (!ok) return;
+      // Extra warning when any selected item has not met its seed requirements.
+      // Accepting it sets force=true so the server-side gate doesn't refuse.
+      let force = false;
+      const unmet = items.filter(i => selected.has(`${i.arr}:${i.arr_id}`) && !i.safe_to_delete);
+      if (unmet.length) {
+        const names = unmet.map(i => i.title).join(", ");
+        force = confirm(
+          `Seed requirements have not been met for: ${names}\n\n` +
+          "Deleting now may violate tracker rules (ratio / seed time targets).\n\nAre you sure?"
+        );
+        if (!force) return;
+      }
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = "Working…";
       try {
         const resp = await fetch("/api/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: selection }),
+          body: JSON.stringify({ items: selection, force }),
         });
         const data = await resp.json();
         const notice = document.getElementById("notice");
+        const details = (data.results || [])
+          .map(r => `${r.title}: ${r.message}${r.steps && r.steps.length ? " [" + r.steps.join("; ") + "]" : ""}`)
+          .join(" · ");
         if (data.ok) {
-          notice.className = "success";
-          notice.textContent = data.results.map(r => `${r.title}: ${r.message}`).join(" · ");
+          notice.className = data.dry_run ? "error" : "success";
+          notice.textContent = (data.dry_run ? "DRY RUN — nothing deleted. " : "") + details;
+          if (!data.dry_run) {
+            sessionStorage.removeItem(CACHE_KEY); // stale after deletion
+            await loadLibrary(true);
+          }
         } else {
           notice.className = "error";
-          notice.textContent = data.error || (data.results || []).map(r => `${r.title}: ${r.message}`).join(" · ");
+          notice.textContent = data.error || details;
         }
-        setTimeout(() => { notice.className = ""; }, 6000);
+        // keep dry-run notices on screen longer so they can be read
+        setTimeout(() => { notice.className = ""; }, data.dry_run ? 15000 : 6000);
       } catch (e) {
         document.getElementById("notice").className = "error";
         document.getElementById("notice").textContent = String(e);
       }
+      updateDeleteBtn();
     });
 
-    (async function load() {
+    async function loadLibrary(force = false) {
+      // Serve from sessionStorage so navigating back from Settings is instant;
+      // the refresh button (or a delete) forces a live refetch.
+      if (!force) {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            items = parsed.items || [];
+            diagnostics = parsed.diagnostics || [];
+            render();
+            return;
+          } catch { /* fall through to fetch */ }
+        }
+      }
+      refreshBtn.classList.add("spin");
       try {
         const resp = await fetch("/api/library");
         const data = await resp.json();
         items = data.items || [];
         diagnostics = data.diagnostics || [];
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ items, diagnostics }));
       } catch (e) {
         diagnostics = ["Failed to load library: " + e];
         document.getElementById("notice").className = "error";
         document.getElementById("notice").textContent = "Failed to load library: " + e;
       }
+      refreshBtn.classList.remove("spin");
       render();
-    })();
+    }
+
+    refreshBtn.addEventListener("click", () => loadLibrary(true));
+
+    loadLibrary(false);
   </script>
 </body>
 </html>

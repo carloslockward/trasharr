@@ -43,7 +43,7 @@
 
     <h2>Services</h2>
     <form method="POST" action="{{ url_for('trasharr.settings') }}">
-      {% for svc in ['qbittorrent','sonarr','radarr','jellyfin','prowlarr'] %}
+      {% for svc in ['qbittorrent','sonarr','radarr','prowlarr'] %}
       <div class="card" style="margin-bottom:12px">
         <div class="row toggle">
           <label>{{ svc }} enabled</label>
@@ -64,26 +64,25 @@
       {% endfor %}
 
       <div class="row"><label>cross-seed tag</label><input type="text" name="cross_seed_tag" value="{{ config.data['cross_seed_tag'] }}"></div>
-      <div class="row toggle"><label>Only show safe content</label><input type="checkbox" name="show_only_safe" {% if config.data['show_only_safe'] %}checked{% endif %}></div>
       <div class="row"><button class="btn" type="submit">Save service settings</button></div>
     </form>
 
     <h2>Per-tracker seeding limits</h2>
-    <p class="hint">How long / what ratio each private tracker requires before it is safe to delete. A value of 0 means "no requirement" on that axis. Matched by the tracker domain shown on the torrent. Changes save immediately when you Add or Remove below.</p>
+    <p class="hint">How long / what ratio each private tracker requires before it is safe to delete. A value of 0 means "no requirement" on that axis. Matched by the tracker domain shown on the torrent.</p>
+    <div class="row" style="justify-content:flex-end; margin-bottom:8px; gap:6px;">
+      <button class="btn subtle" id="cancelTrackersBtn" type="button" hidden>Cancel</button>
+      <button class="btn subtle" id="editTrackersBtn" type="button">Edit</button>
+    </div>
     <table>
       <thead><tr><th>Tracker domain</th><th>Ratio ≥</th><th>Seed time ≥ (min)</th><th></th></tr></thead>
       <tbody>
       {% for domain in config.tracker_domains() %}
         {% set req = config.tracker_requirement(domain) %}
-        <tr>
+        <tr class="tracker-row" data-domain="{{ domain }}">
           <td>{{ domain }}</td>
-          <td>{{ req['target_ratio'] }}</td>
-          <td>{{ req['target_seed_time_minutes'] }}</td>
-          <td>
-            <form method="POST" action="{{ url_for('trasharr.remove_tracker', domain=domain) }}">
-              <button class="btn danger" type="submit">Remove</button>
-            </form>
-          </td>
+          <td><input type="number" class="t-ratio" step="0.01" min="0" value="{{ req['target_ratio'] }}" style="width:90px" disabled></td>
+          <td><input type="number" class="t-time" step="1" min="0" value="{{ req['target_seed_time_minutes'] }}" style="width:120px" disabled></td>
+          <td><button class="btn danger remove-btn" type="button" disabled>Remove</button></td>
         </tr>
       {% else %}
         <tr><td colspan="4" style="color:var(--muted)">No trackers configured yet.</td></tr>
@@ -93,7 +92,12 @@
 
     <h2>Add tracker</h2>
     <form class="card" method="POST" action="{{ url_for('trasharr.add_tracker') }}">
-      <div class="row"><label>Tracker domain</label><input type="text" name="domain" placeholder="tracker.example.com" required></div>
+      <div class="row">
+        <label>Tracker domain</label>
+        <select name="domain" id="trackerSelect" required style="flex:1; min-width:220px; background:#0d0f12; border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:6px; font-size:13px;">
+          <option value="" disabled selected>Loading discovered trackers…</option>
+        </select>
+      </div>
       <div class="row"><label>Target ratio</label><input type="number" name="target_ratio" step="0.01" min="0" value="0"></div>
       <div class="row"><label>Target seed time (min)</label><input type="number" name="target_seed_time_minutes" step="1" min="0" value="0"></div>
       <div class="row"><button class="btn" type="submit">Add tracker</button></div>
@@ -102,5 +106,98 @@
     <h2>Configuration file</h2>
     <p class="hint">{{ config.path }} — API keys and limits live in this JSON, which is git-ignored.</p>
   </div>
+  <script>
+    // Single Edit/Save/Cancel toggle over the tracker table. The rows are plain
+    // <tr> elements (no per-row forms): Edit enables the inputs, Save PUTs every
+    // row via fetch (no navigation -> no scroll jump), Cancel restores values.
+    const editBtn = document.getElementById("editTrackersBtn");
+    const cancelBtn = document.getElementById("cancelTrackersBtn");
+    const rows = () => [...document.querySelectorAll("tr.tracker-row")];
+    let savedValues = [];
+
+    function setEditing(on) {
+      for (const tr of rows()) {
+        tr.querySelector(".t-ratio").disabled = !on;
+        tr.querySelector(".t-time").disabled = !on;
+        const rm = tr.querySelector(".remove-btn");
+        rm.disabled = !on;
+        rm.onclick = on ? () => removeTracker(tr.dataset.domain) : null;
+      }
+      editBtn.textContent = on ? "Save" : "Edit";
+      editBtn.classList.toggle("subtle", !on);
+      cancelBtn.hidden = !on;
+    }
+
+    async function removeTracker(domain) {
+      const body = new URLSearchParams();
+      await fetch(`/settings/trackers/${encodeURIComponent(domain)}/delete`, { method: "POST", body });
+      document.querySelector(`tr.tracker-row[data-domain="${CSS.escape(domain)}"]`)?.remove();
+    }
+
+    async function saveAll() {
+      editBtn.disabled = true;
+      try {
+        await Promise.all(rows().map(tr => {
+          const body = new URLSearchParams({
+            target_ratio: tr.querySelector(".t-ratio").value || "0",
+            target_seed_time_minutes: tr.querySelector(".t-time").value || "0",
+          });
+          return fetch(`/settings/trackers/${encodeURIComponent(tr.dataset.domain)}/edit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+          });
+        }));
+        savedValues = rows().map(tr => [tr.querySelector(".t-ratio").value, tr.querySelector(".t-time").value]);
+        setEditing(false);
+      } catch (e) {
+        alert("Save failed: " + e);
+      }
+      editBtn.disabled = false;
+    }
+
+    editBtn.addEventListener("click", () => {
+      if (editBtn.textContent.trim() === "Edit") {
+        savedValues = rows().map(tr => [tr.querySelector(".t-ratio").value, tr.querySelector(".t-time").value]);
+        setEditing(true);
+      } else {
+        saveAll();
+      }
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      rows().forEach((tr, i) => {
+        if (savedValues[i]) {
+          tr.querySelector(".t-ratio").value = savedValues[i][0];
+          tr.querySelector(".t-time").value = savedValues[i][1];
+        }
+      });
+      setEditing(false);
+    });
+
+    // Populate the Add-tracker dropdown with domains discovered on live torrents.
+    (async function loadDiscoveredTrackers() {
+      const select = document.getElementById("trackerSelect");
+      if (!select) return;
+      const configured = new Set([...document.querySelectorAll("table tbody td:first-child")].map(td => td.textContent.trim()));
+      try {
+        const resp = await fetch("/api/trackers/discovered");
+        const data = await resp.json();
+        select.innerHTML = "";
+        if (!data.ok || !(data.domains || []).length) {
+          select.innerHTML = `<option value="" disabled selected>${data.error ? "Could not load trackers" : "No trackers discovered yet"}</option>`;
+          return;
+        }
+        for (const d of data.domains) {
+          const opt = document.createElement("option");
+          opt.value = d;
+          opt.textContent = configured.has(d) ? `${d} (already configured)` : d;
+          select.appendChild(opt);
+        }
+      } catch (e) {
+        select.innerHTML = `<option value="" disabled selected>Could not load trackers (${String(e)})</option>`;
+      }
+    })();
+  </script>
 </body>
 </html>

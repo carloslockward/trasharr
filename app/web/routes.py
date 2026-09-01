@@ -27,6 +27,7 @@ from ..service import (
     load_items,
     make_clients,
 )
+from ..service.matcher import discovered_tracker_domains
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def _to_json(item) -> dict[str, Any]:
                 "target_ratio": ev.target_ratio,
                 "target_time_minutes": ev.target_time_minutes,
                 "met": ev.met,
+                "cross_seed": ev.is_cross_seed,
             }
         )
     return {
@@ -60,7 +62,6 @@ def _to_json(item) -> dict[str, Any]:
         "title": item.title,
         "year": item.year,
         "media_type": item.media_type,
-        "watched": item.watched,
         "image_url": item.image_url,
         "torrents": torrents,
         "seeding_complete": item.seeding_complete,
@@ -89,6 +90,7 @@ def api_delete():
     config = _config()
     payload = request.get_json(silent=True) or {}
     selections = payload.get("items") or []
+    force = bool(payload.get("force"))
     if not selections:
         return jsonify({"ok": False, "error": "no items selected"}), 400
 
@@ -121,12 +123,14 @@ def api_delete():
         return jsonify({"ok": False, "error": "none of the selections matched the current index"}), 400
 
     coord = DeleteCoordinator(qbt, sonarr, radarr, config)
-    results: list[DeletionResult] = coord.delete_many(selected)
+    results: list[DeletionResult] = coord.delete_many(selected, force=force)
     return jsonify(
         {
             "ok": all(r.ok for r in results),
+            "dry_run": coord.dry_run,
             "results": [
-                {"title": r.item_title, "ok": r.ok, "message": r.message, "removed": r.removed_hashes}
+                {"title": r.item_title, "ok": r.ok, "message": r.message,
+                 "steps": r.steps, "removed": r.removed_hashes}
                 for r in results
             ],
         }
@@ -141,7 +145,7 @@ def settings():
     if request.method == "POST":
         form = request.form
         # Update each enabled service block.
-        for svc in ("qbittorrent", "sonarr", "radarr", "jellyfin", "prowlarr"):
+        for svc in ("qbittorrent", "sonarr", "radarr", "prowlarr"):
             entry = config.data[svc]
             entry["enabled"] = form.get(f"{svc}_enabled") == "on"
             if svc == "qbittorrent":
@@ -153,11 +157,28 @@ def settings():
                 entry["base_url"] = form.get(f"{svc}_base_url", "").strip()
                 entry["api_key"] = form.get(f"{svc}_api_key", "").strip()
         config.data["cross_seed_tag"] = form.get("cross_seed_tag", "cross-seed").strip() or "cross-seed"
-        config.data["show_only_safe"] = form.get("show_only_safe") == "on"
         config.save()
         return redirect(url_for("trasharr.settings"))
 
     return render_template("settings.html", config=config)
+
+
+@bp.route("/api/trackers/discovered")
+def api_discovered_trackers():
+    """Tracker domains currently seen on live torrents (for the settings dropdown)."""
+    config = _config()
+    clients = make_clients(config)
+    qbt = clients.get("qbt")
+    if not qbt:
+        return jsonify({"ok": False, "error": "qbittorrent is not enabled", "domains": []}), 400
+    try:
+        qbt.login()
+        domains = discovered_tracker_domains(qbt)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc), "domains": []}), 502
+    finally:
+        qbt.close()
+    return jsonify({"ok": True, "domains": domains})
 
 
 @bp.route("/settings/trackers", methods=["POST"])
@@ -166,6 +187,21 @@ def add_tracker():
     domain = request.form.get("domain", "").strip().lower()
     if not domain:
         return jsonify({"ok": False, "error": "domain required"}), 400
+    try:
+        ratio = float(request.form.get("target_ratio", 0) or 0)
+        time_min = float(request.form.get("target_seed_time_minutes", 0) or 0)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid numbers"}), 400
+    config.set_tracker_requirement(domain, ratio, time_min)
+    return redirect(url_for("trasharr.settings"))
+
+
+@bp.route("/settings/trackers/<domain>/edit", methods=["POST"])
+def edit_tracker(domain: str):
+    """Update the seeding requirement of an existing tracker (domain stays fixed)."""
+    config = _config()
+    if domain not in config.data["trackers"]:
+        return jsonify({"ok": False, "error": "tracker not configured"}), 404
     try:
         ratio = float(request.form.get("target_ratio", 0) or 0)
         time_min = float(request.form.get("target_seed_time_minutes", 0) or 0)

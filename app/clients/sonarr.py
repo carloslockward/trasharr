@@ -12,7 +12,7 @@ class SonarrClient(ArrrClient):
         return "series"
 
     def episodes_watched_state(self) -> dict[int, dict[str, Any]]:
-        """Not used directly; watched state comes from Jellyfin. Kept minimal."""
+        """Not used; watched state is the user's call, not a service's. Kept minimal."""
         return {}
 
     def series(self) -> list[dict[str, Any]]:

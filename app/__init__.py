@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = os.environ.get("TRASHARR_CONFIG_DIR", os.getcwd())
 
+# Verbose enough to show the dry-run / delete intent logs on the console
+# (delete.py logs at INFO), including the Flask request line.
+logging.basicConfig(
+    level=os.environ.get("TRASHARR_LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 
 def create_app() -> Flask:
     app = Flask(__name__)

@@ -3,20 +3,20 @@ whether their seeding requirement has been met.
 
 Design notes
 ------------
-* Matching is exact where possible. The arr grab history records ``downloadId``
-  == the qBittorrent torrent hash, so once we know a media item's arr id we can
-  attach its real torrents with no title guessing.
-* The remaining fuzzy step is the *bridge* between Jellyfin (the "watched"
-  truth) and the arrs (Sonarr/Radarr), because Jellyfin and the arrs have
-  independent IDs. We bridge watched items to arr items by normalized title +
-  year. That bridge is the one heuristic in the system and is kept isolated here
-  so it can be hardened later (e.g. TheMovieDB/TVDB IDs) without touching the
-  delete contract.
+* Matching is exact. The arr grab history records ``downloadId`` == the
+  qBittorrent torrent hash, so a media item's torrents are attached by hash
+  with no title guessing.
+* Watched state is NOT part of the model: trasharr lists every arr item whose
+  torrents have met their seeding requirement; the user picks what they have
+  watched themselves.
 * A torrent's seeding-complete status is computed in trasharr using per-tracker
   targets from config -- because the stack is deliberately configured to "no
   limit, seed forever", qBittorrent never stops a torrent on its own.
 * The "met" rule mirrors private trackers: met when ratio >= target OR
-  seed time >= target. Set an unused axis to 0.
+  seed time >= target. Set an unused axis to 0. A tracker with no requirement
+  configured is treated as complete.
+* Tracker domains discovered on live torrents are auto-added to the config
+  with blank (0/0) requirements so the user can fill them in via Settings.
 """
 
 from __future__ import annotations
@@ -59,9 +59,15 @@ class SeedEvaluation:
     seeding_time_seconds: int
     ratio_met: bool
     time_met: bool
+    is_cross_seed: bool = False
 
     @property
     def met(self) -> bool:
+        # A cross-seed copy was never downloaded from its tracker (the data was
+        # grabbed once via the original torrent), so private trackers do not
+        # count upload/download against it — its seeding limits don't apply.
+        if self.is_cross_seed:
+            return True
         ratio_required = self.target_ratio > 0
         time_required = self.target_time_minutes > 0
         if not ratio_required and not time_required:
@@ -71,14 +77,13 @@ class SeedEvaluation:
 
 @dataclass
 class MediaItem:
-    """A watched media item with its matched torrents and evaluations."""
+    """An arr media item with its matched torrents and evaluations."""
 
     arr: str            # "sonarr" | "radarr"
     arr_id: int
     title: str
     year: int | None = None
     media_type: str = "movie"   # "movie" | "series"
-    watched: bool = True
     image_url: str | None = None
     torrents: list[TorrentDict] = field(default_factory=list)
     evaluations: list[SeedEvaluation] = field(default_factory=list)
@@ -96,7 +101,7 @@ class MediaItem:
 
     @property
     def safe_to_delete(self) -> bool:
-        return self.watched and self.seeding_complete
+        return self.seeding_complete
 
 
 def _normalize_title(title: Any) -> str:
@@ -111,7 +116,7 @@ def _year_of(obj: dict[str, Any]) -> int | None:
 
 
 def _tracker_domains(qbt: QBittorrentClient, info: TorrentInfo) -> list[str]:
-    """Extract private-tracker hosts a torrent announces to (from qBit truth)."""
+    """Extract tracker hosts a torrent announces to (from qBit truth)."""
     try:
         trackers = qbt.torrent_trackers(info.hash)
     except Exception:
@@ -120,11 +125,23 @@ def _tracker_domains(qbt: QBittorrentClient, info: TorrentInfo) -> list[str]:
     for t in trackers:
         url = t.get("url") or ""
         if not url or url.startswith("**"):
-            continue  # public/DHT/autodetected
+            continue  # DHT/PeX/LSD pseudo-trackers
         host = url.split("://")[-1].split("/")[0]
         if host and host not in domains:
             domains.append(host)
     return domains
+
+
+def discovered_tracker_domains(qbt: QBittorrentClient) -> list[str]:
+    """Every distinct tracker host currently seen on live qBittorrent torrents.
+
+    Used by the settings page to offer an autopopulated dropdown when adding a
+    tracker; nothing is written to the config automatically.
+    """
+    domains: set[str] = set()
+    for t in qbt.torrents():
+        domains.update(_tracker_domains(qbt, _torrent_to_info(t)))
+    return sorted(domains)
 
 
 def evaluate_torrent(qbt: QBittorrentClient, raw: dict[str, Any], config) -> SeedEvaluation:
@@ -139,6 +156,11 @@ def evaluate_torrent(qbt: QBittorrentClient, raw: dict[str, Any], config) -> See
         req = config.tracker_requirement(domain)
         target_ratio, target_time = req["target_ratio"], req["target_seed_time_minutes"]
 
+    # A tagged cross-seed copy was never downloaded from its tracker (the data
+    # was grabbed once via the original torrent), so its seeding limits don't
+    # apply — it is always treated as meeting requirements.
+    is_cross_seed = config.cross_seed_tag() in info.tags
+
     return SeedEvaluation(
         torrent_hash=info.hash,
         tracker_domain=domain,
@@ -148,6 +170,7 @@ def evaluate_torrent(qbt: QBittorrentClient, raw: dict[str, Any], config) -> See
         seeding_time_seconds=info.seeding_time,
         ratio_met=info.ratio >= target_ratio if target_ratio > 0 else False,
         time_met=info.seeding_time / 60 >= target_time if target_time > 0 else False,
+        is_cross_seed=is_cross_seed,
     )
 
 
@@ -167,27 +190,55 @@ def _torrent_to_info(raw: dict[str, Any]) -> TorrentInfo:
     )
 
 
-def _build_title_index(entries: list[dict[str, Any]], id_key: str) -> dict[tuple[str, int | None], dict[str, Any]]:
-    """Index arr movies/series by (normalized title, year) -> record."""
-    index: dict[tuple[str, int | None], dict[str, Any]] = {}
-    for e in entries:
-        title = _normalize_title(e.get("title"))
-        if not title:
-            continue
-        index[(title, _year_of(e))] = e
-    return index
+def _arr_poster(arr_rec: dict[str, Any], base_url: str) -> str | None:
+    """Poster URL for an arr record, made absolute against the arr's base URL.
 
-
-def _bridge_watched(jellyfin_item, arr_by_title: dict[tuple[str, int | None], dict[str, Any]]) -> dict[str, Any] | None:
-    """Find the arr record for a Jellyfin watched item (normalized title+year)."""
-    title = _normalize_title(jellyfin_item.get("Name") or jellyfin_item.get("name") or "")
-    if not title:
+    The arr's ``images[].url`` is a server-relative path like
+    ``/MediaCover/37/poster.jpg``; it only resolves when prefixed with the
+    arr's own origin. ``remoteUrl`` (when present) is already absolute.
+    """
+    images = arr_rec.get("images")
+    poster = None
+    if isinstance(images, list):
+        for img in images:
+            if isinstance(img, dict) and img.get("coverType") == "poster":
+                poster = img
+                break
+        if poster is None and images and isinstance(images[0], dict):
+            poster = images[0]
+    if not poster:
         return None
-    year = _year_of(jellyfin_item)
-    # Exact year first, then any-year fallback (yearly mismatches happen).
-    if (title, year) in arr_by_title:
-        return arr_by_title[(title, year)]
-    return next((rec for (t, _y), rec in arr_by_title.items() if t == title), None)
+    remote = poster.get("remoteUrl")
+    if isinstance(remote, str) and remote:
+        return remote
+    url = poster.get("url")
+    if isinstance(url, str) and url:
+        if url.startswith("http"):
+            return url
+        if base_url:
+            return f"{base_url.rstrip('/')}/{url.lstrip('/')}"
+    return None
+
+
+def _media_item(
+    arr: str,
+    arr_rec: dict[str, Any],
+    base_url: str,
+    matched: list[TorrentDict],
+    qbt: QBittorrentClient,
+    config,
+) -> MediaItem:
+    item = MediaItem(
+        arr=arr,
+        arr_id=int(arr_rec.get("id") or 0),
+        title=str(arr_rec.get("title") or ""),
+        year=_year_of(arr_rec),
+        media_type="series" if arr == "sonarr" else "movie",
+        image_url=_arr_poster(arr_rec, base_url),
+        torrents=matched,
+    )
+    item.evaluations = [evaluate_torrent(qbt, t, config) for t in matched]
+    return item
 
 
 def build_index(
@@ -197,16 +248,16 @@ def build_index(
     radarr_history: list[dict[str, Any]],
     radarr_movies: list[dict[str, Any]],
     sonarr_series: list[dict[str, Any]],
-    watched_movies: list[dict[str, Any]],
-    watched_series: list[dict[str, Any]],
+    radarr_base_url: str = "",
+    sonarr_base_url: str = "",
 ) -> list[MediaItem]:
-    """Assemble watched media items with their matched torrents + evaluations.
+    """Assemble media items with their matched torrents + evaluations.
 
     Steps:
-      1. Build arr-title index (Radarr movies, Sonarr series).
-      2. Bridge each Jellyfin watched item to an arr record by title+year.
-      3. Map arr history ``downloadId`` -> torrent hash -> real qBit torrents.
-      4. Attach torrents to items and evaluate seeding completeness.
+      1. Index live qBittorrent torrents by hash.
+      2. Map arr grab-history ``downloadId`` -> torrent hash per arr item.
+      3. Build a MediaItem for every arr item that has at least one live
+         torrent (watched state is intentionally not considered).
     """
     torrents = qbt.torrents()
     torrent_by_hash: dict[str, dict[str, Any]] = {t["hash"].lower(): t for t in torrents}
@@ -220,63 +271,22 @@ def build_index(
         if h.get("movieId"):
             hashes_by_arr.setdefault(("radarr", int(h["movieId"])), []).append((h.get("downloadId") or "").lower())
 
-    radarr_by_title = _build_title_index(radarr_movies, "id")
-    sonarr_by_title = _build_title_index(sonarr_series, "id")
-
     items: list[MediaItem] = []
 
-    for mov in watched_movies:
-        arr_rec = _bridge_watched(mov, radarr_by_title)
-        if arr_rec is None:
-            continue  # watched in Jellyfin but not in Radarr (e.g. manually added)
-        arr_id = int(arr_rec.get("id") or 0)
+    for rec in radarr_movies:
+        arr_id = int(rec.get("id") or 0)
         hashes = hashes_by_arr.get(("radarr", arr_id), [])
         matched = [torrent_by_hash[h] for h in hashes if h in torrent_by_hash]
-        item = MediaItem(
-            arr="radarr",
-            arr_id=arr_id,
-            title=str(arr_rec.get("title") or mov.get("Name") or ""),
-            year=_year_of(arr_rec) or _year_of(mov),
-            media_type="movie",
-            watched=True,
-            image_url=_arr_poster(arr_rec),
-            torrents=matched,
-        )
-        item.evaluations = [evaluate_torrent(qbt, t, config) for t in matched]
-        items.append(item)
+        if matched:
+            items.append(_media_item("radarr", rec, radarr_base_url, matched, qbt, config))
 
-    for ser in watched_series:
-        arr_rec = _bridge_watched(ser, sonarr_by_title)
-        if arr_rec is None:
-            continue
-        arr_id = int(arr_rec.get("id") or 0)
+    for rec in sonarr_series:
+        arr_id = int(rec.get("id") or 0)
         hashes = hashes_by_arr.get(("sonarr", arr_id), [])
         matched = [torrent_by_hash[h] for h in hashes if h in torrent_by_hash]
-        item = MediaItem(
-            arr="sonarr",
-            arr_id=arr_id,
-            title=str(arr_rec.get("title") or ser.get("Name") or ""),
-            year=_year_of(arr_rec) or _year_of(ser),
-            media_type="series",
-            watched=True,
-            image_url=_arr_poster(arr_rec),
-            torrents=matched,
-        )
-        item.evaluations = [evaluate_torrent(qbt, t, config) for t in matched]
-        items.append(item)
+        if matched:
+            items.append(_media_item("sonarr", rec, sonarr_base_url, matched, qbt, config))
 
-    # Cross-seed content-siblings are grouped here when a matched torrent shares
-    # files with other torrents. The delete coordinator (delete.py) is the final
-    # authority on file-set grouping; this keeps the list view straightforward.
+    # Cross-seed content-siblings are grouped by the delete coordinator
+    # (delete.py), which is the final authority on file-set grouping.
     return items
-
-
-def _arr_poster(arr_rec: dict[str, Any]) -> str | None:
-    """Best-effort poster from the arr record (varies by arr version)."""
-    for key in ("remotePoster", "posterPath", "images"):
-        val = arr_rec.get(key)
-        if isinstance(val, str) and val:
-            return val
-        if isinstance(val, list) and val and isinstance(val[0], dict):
-            return val[0].get("url")
-    return None

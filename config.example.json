@@ -16,11 +16,6 @@
     "base_url": "http://radarr:7878",
     "api_key": "REPLACE_ME"
   },
-  "jellyfin": {
-    "enabled": false,
-    "base_url": "http://jellyfin:8096",
-    "api_key": "REPLACE_ME"
-  },
   "prowlarr": {
     "enabled": false,
     "base_url": "http://prowlarr:9696",
@@ -32,6 +27,5 @@
       "target_seed_time_minutes": 175320
     }
   },
-  "show_only_safe": true,
   "cross_seed_tag": "cross-seed"
 }

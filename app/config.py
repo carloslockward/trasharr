@@ -40,15 +40,12 @@ DEFAULT_CONFIG = {
     },
     "sonarr": dict(DEFAULT_SERVICE_FIELDS),
     "radarr": dict(DEFAULT_SERVICE_FIELDS),
-    "jellyfin": dict(DEFAULT_SERVICE_FIELDS),
     "prowlarr": dict(DEFAULT_SERVICE_FIELDS),
     # Trackers are keyed by their domain (as reported on qBittorrent torrents).
     # target_ratio and target_seed_time_minutes are the minimums trasharr
     # requires before deeming a torrent seeding-complete on that tracker.
     # A value of 0 means "no requirement" for that axis.
     "trackers": {},
-    # Whether only watched & seeding-complete items are shown by default.
-    "show_only_safe": True,
     # qBittorrent tag that marks cross-seed copies (default from the project).
     "cross_seed_tag": "cross-seed",
 }

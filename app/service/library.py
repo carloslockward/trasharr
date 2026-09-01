@@ -1,8 +1,8 @@
 """Assemble the library index from the currently-configured services.
 
 This wires the config to live API clients, fetches the data build_index needs,
-and returns the list of watched MediaItems. It is the single entry point the
-web layer (and any future CLI) uses to present the "safe to delete" list.
+and returns the list of MediaItems. It is the single entry point the web layer
+(and any future CLI) uses to present the "safe to delete" list.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from ..clients import (
     QBittorrentClient,
     SonarrClient,
     RadarrClient,
-    JellyfinClient,
     ProwlarrClient,
 )
 from .matcher import MediaItem, build_index
@@ -28,7 +27,6 @@ class ClientBundle(TypedDict, total=False):
     qbt: QBittorrentClient
     sonarr: SonarrClient
     radarr: RadarrClient
-    jellyfin: JellyfinClient
     prowlarr: ProwlarrClient
 
 
@@ -37,7 +35,6 @@ def make_clients(config: Config) -> ClientBundle:
     q = config.service("qbittorrent")
     s = config.service("sonarr")
     r = config.service("radarr")
-    j = config.service("jellyfin")
     p = config.service("prowlarr")
     bundle: ClientBundle = {}
     if config.is_enabled("qbittorrent"):
@@ -51,15 +48,13 @@ def make_clients(config: Config) -> ClientBundle:
         bundle["sonarr"] = SonarrClient(s.get("base_url", ""), s.get("api_key", ""))
     if config.is_enabled("radarr"):
         bundle["radarr"] = RadarrClient(r.get("base_url", ""), r.get("api_key", ""))
-    if config.is_enabled("jellyfin"):
-        bundle["jellyfin"] = JellyfinClient(j.get("base_url", ""), j.get("api_key", ""))
     if config.is_enabled("prowlarr"):
         bundle["prowlarr"] = ProwlarrClient(p.get("base_url", ""), p.get("api_key", ""))
     return bundle
 
 
 def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[list[MediaItem], list[str]]:
-    """Fetch all watched content and evaluate seeding status.
+    """Fetch all arr items + torrents and evaluate seeding status.
 
     Returns ``(items, diagnostics)`` — diagnostics is a list of human-readable
     strings describing what was fetched (and any per-service errors), so an
@@ -70,14 +65,11 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
     qbt: Optional[QBittorrentClient] = clients.get("qbt")
     sonarr: Optional[SonarrClient] = clients.get("sonarr")
     radarr: Optional[RadarrClient] = clients.get("radarr")
-    jellyfin: Optional[JellyfinClient] = clients.get("jellyfin")
 
     if not qbt:
         diag.append("qBittorrent is not enabled or has no base URL set.")
-    if not jellyfin:
-        diag.append("Jellyfin is not enabled or has no base URL set.")
-    if not qbt or not jellyfin:
-        diag.append("Both qBittorrent and Jellyfin must be enabled to build the list.")
+    if not qbt or not (sonarr or radarr):
+        diag.append("qBittorrent plus at least one arr must be enabled to build the list.")
         if qbt:
             qbt.close()
         return [], diag
@@ -90,8 +82,6 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
         radarr_history: list = []
         radarr_movies: list = []
         sonarr_series: list = []
-        watched_movies: list = []
-        watched_series: list = []
 
         if sonarr:
             try:
@@ -107,17 +97,6 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
                 diag.append(f"Radarr: {len(radarr_movies)} movies, {len(radarr_history)} grab records.")
             except Exception as exc:
                 diag.append(f"Radarr fetch failed: {exc}")
-        if jellyfin:
-            try:
-                watched_movies = jellyfin.watched_movies()
-                diag.append(f"Jellyfin: {len(watched_movies)} watched movies.")
-            except Exception as exc:
-                diag.append(f"Jellyfin movies fetch failed: {exc}")
-            try:
-                watched_series = jellyfin.watched_series()
-                diag.append(f"Jellyfin: {len(watched_series)} watched series.")
-            except Exception as exc:
-                diag.append(f"Jellyfin series fetch failed: {exc}")
 
         items = build_index(
             qbt=qbt,
@@ -126,10 +105,10 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
             radarr_history=radarr_history,
             radarr_movies=radarr_movies,
             sonarr_series=sonarr_series,
-            watched_movies=watched_movies,
-            watched_series=watched_series,
+            radarr_base_url=(config.service("radarr").get("base_url") or ""),
+            sonarr_base_url=(config.service("sonarr").get("base_url") or ""),
         )
-        diag.append(f"Matched {len(items)} watched item(s) to torrents.")
+        diag.append(f"Matched {len(items)} item(s) to live torrents.")
         return items, diag
     finally:
         if qbt:
