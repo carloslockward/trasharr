@@ -247,7 +247,9 @@
         }).join("");
 
         const badge = it.safe_to_delete
-          ? '<span class="badge ok">safe to delete</span>'
+          ? (it.no_live_torrents
+              ? '<span class="badge ok">no torrents · safe</span>'
+              : '<span class="badge ok">safe to delete</span>')
           : '<span class="badge warn">still seeding</span>';
 
         card.innerHTML = `

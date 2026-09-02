@@ -87,10 +87,15 @@ class MediaItem:
     image_url: str | None = None
     torrents: list[TorrentDict] = field(default_factory=list)
     evaluations: list[SeedEvaluation] = field(default_factory=list)
+    # True when the arr's grab history exists but no live torrent remains:
+    # nothing is seeding, so the item is trivially safe to delete.
+    no_live_torrents: bool = False
 
     @property
     def seeding_complete(self) -> bool:
         """Safe only when every matched torrent is seeding-complete."""
+        if self.no_live_torrents:
+            return True
         if not self.torrents:
             return False
         return all(ev.met and state not in {"error", "missingFiles"}
@@ -227,6 +232,7 @@ def _media_item(
     matched: list[TorrentDict],
     qbt: QBittorrentClient,
     config,
+    seeding_complete: bool = False,
 ) -> MediaItem:
     item = MediaItem(
         arr=arr,
@@ -238,6 +244,8 @@ def _media_item(
         torrents=matched,
     )
     item.evaluations = [evaluate_torrent(qbt, t, config) for t in matched]
+    if seeding_complete:
+        item.no_live_torrents = True
     return item
 
 
@@ -257,7 +265,11 @@ def build_index(
       1. Index live qBittorrent torrents by hash.
       2. Map arr grab-history ``downloadId`` -> torrent hash per arr item.
       3. Build a MediaItem for every arr item that has at least one live
-         torrent (watched state is intentionally not considered).
+         torrent OR whose grab history exists but torrents are gone (the files
+         were already removed by other means) — those are trivially safe.
+
+    Watched state is intentionally not considered: the user picks what to
+    delete themselves.
     """
     torrents = qbt.torrents()
     torrent_by_hash: dict[str, dict[str, Any]] = {t["hash"].lower(): t for t in torrents}
@@ -279,6 +291,11 @@ def build_index(
         matched = [torrent_by_hash[h] for h in hashes if h in torrent_by_hash]
         if matched:
             items.append(_media_item("radarr", rec, radarr_base_url, matched, qbt, config))
+        elif hashes:
+            # Grabbed in the past but no live torrent remains (removed through
+            # the arr or qBittorrent already). Nothing is seeding, so the item
+            # is trivially safe to delete from the arr's library.
+            items.append(_media_item("radarr", rec, radarr_base_url, [], qbt, config, seeding_complete=True))
 
     for rec in sonarr_series:
         arr_id = int(rec.get("id") or 0)
@@ -286,6 +303,8 @@ def build_index(
         matched = [torrent_by_hash[h] for h in hashes if h in torrent_by_hash]
         if matched:
             items.append(_media_item("sonarr", rec, sonarr_base_url, matched, qbt, config))
+        elif hashes:
+            items.append(_media_item("sonarr", rec, sonarr_base_url, [], qbt, config, seeding_complete=True))
 
     # Cross-seed content-siblings are grouped by the delete coordinator
     # (delete.py), which is the final authority on file-set grouping.
