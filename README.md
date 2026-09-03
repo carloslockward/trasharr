@@ -15,6 +15,11 @@ yourself.
 
 - Lists every movie/series in Sonarr/Radarr that still has live torrents in qBittorrent,
   with per-tracker progress bars showing ratio / seed time against the tracker's targets.
+- **Disk usage per item**: every card shows how much storage the movie/series occupies
+  (as reported by the arr, so it works even when the torrent is already gone), and
+  selecting items shows a running total of what you are about to free.
+- Items whose torrents are already gone still appear (from the arr grab history) and
+  are trivially safe to delete — the remaining work is just removing them from the arr.
 - One-click delete removes an item everywhere it lives:
   1. Verifies every hosting torrent (including cross-seed copies sharing the same
      content) has met its tracker's requirement — refuses otherwise
@@ -37,8 +42,8 @@ yourself.
 - Tracker discovery: the settings page offers a dropdown of every tracker domain seen
   on live torrents, so adding a new tracker is one click.
 - Fast UI: the library is cached in the browser (navigating to Settings and back is
-  instant), with a refresh button, sort by name or seed time (direction toggle), and a
-  hover card showing every torrent behind a show.
+  instant), with a refresh button, sort by name / seed time / size (direction toggle),
+  and a hover card showing every torrent behind a show.
 
 ## Why?
 
@@ -60,7 +65,8 @@ app/
     radarr.py      Radarr API v3
     prowlarr.py    Prowlarr API v1 (tracker discovery; reserved)
   service/
-    matcher.py     torrent <-> media item matching + seeding-complete evaluation
+    matcher.py     torrent <-> media item matching, seeding-complete evaluation,
+                   tracker-domain discovery, on-disk size extraction
     library.py     assembles the library from the configured services
     delete.py      the delete contract (verify -> unmonitor -> arr deleteFiles -> qBit remove)
   web/

@@ -63,7 +63,15 @@
     .badge.ok { background:rgba(46,160,67,.18); color:#3fb950; }
     .badge.no { background:rgba(248,81,73,.18); color:#f85149; }
     .badge.warn { background:rgba(210,153,34,.18); color:#d29922; }
-    .card .corner { position:absolute; top:6px; left:6px; z-index:5; }
+    .card .corner { position:absolute; top:6px; left:6px; right:6px; z-index:5; display:flex; justify-content:space-between; align-items:flex-start; gap:4px; }
+    /* status badge on the left, size on the right — same row, same height,
+       and the row wraps nothing: long badge + size share one flex line */
+    .card .corner .badge-wrap { display:inline-flex; min-width:0; }
+    .card .corner .badge { white-space:nowrap; }
+    .card .corner .size-tag { flex:none; }
+    .card .size-tag { background:rgba(13,15,18,.85); color:#c9d1d9; font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; }
+    .selection-summary { font-size:13px; color:#58a6ff; font-weight:600; display:none; }
+    .selection-summary.on { display:inline; }
     .btn { background:#2ea043; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; }
     .btn:disabled { background:#3a3d42; color:#737b86; cursor:not-allowed; }
     .btn.danger { background:#da3633; }
@@ -98,9 +106,11 @@
     <select id="sortSelect" class="sort-select" title="Sort by">
       <option value="name">Sort: name</option>
       <option value="seed_time">Sort: seed time</option>
+      <option value="size">Sort: size</option>
     </select>
     <button class="icon-btn" id="sortDirBtn" title="Toggle sort direction">↓</button>
     <div class="spacer"></div>
+    <span class="selection-summary" id="selectionSummary"></span>
     <button class="btn danger" id="deleteBtn" disabled>Delete selected</button>
   </div>
 
@@ -138,7 +148,7 @@
     const sortSelect = document.getElementById("sortSelect");
     const sortDirBtn = document.getElementById("sortDirBtn");
     // Restore persisted prefs before first render.
-    if (prefs.sort === "name" || prefs.sort === "seed_time") sortSelect.value = prefs.sort;
+    if (["name", "seed_time", "size"].includes(prefs.sort)) sortSelect.value = prefs.sort;
     sortDesc = prefs.desc !== undefined ? !!prefs.desc : true;
     sortDirBtn.textContent = sortDesc ? "↓" : "↑";
     if (prefs.showStillSeeding !== undefined) showStillSeeding.checked = !!prefs.showStillSeeding;
@@ -157,6 +167,8 @@
       let cmp;
       if (sortSelect.value === "seed_time") {
         cmp = (a, b) => maxSeedMinutes(a) - maxSeedMinutes(b);
+      } else if (sortSelect.value === "size") {
+        cmp = (a, b) => (Number(a.size_bytes) || 0) - (Number(b.size_bytes) || 0);
       } else {
         cmp = (a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: "base" });
       }
@@ -172,6 +184,14 @@
       const h = Math.floor(m / 60);
       if (h < 48) return `${h}h`;
       return `${Math.floor(h / 24)}d`;
+    }
+    function fmtSize(bytes) {
+      const b = Number(bytes) || 0;
+      if (b <= 0) return null;
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0, v = b;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
     // Roll torrents up per tracker: the deletion gate is "every torrent met",
@@ -247,24 +267,23 @@
         }).join("");
 
         const badge = it.safe_to_delete
-          ? (it.no_live_torrents
-              ? '<span class="badge ok">no torrents · safe</span>'
-              : '<span class="badge ok">safe to delete</span>')
+          ? '<span class="badge ok">safe to delete</span>'
           : '<span class="badge warn">still seeding</span>';
 
+        const sizeLabel = fmtSize(it.size_bytes);
         card.innerHTML = `
           <div class="poster">${it.image_url
             ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${esc(it.title[0] || "?")}';this.remove()">`
             : esc(it.title[0] || "?")}</div>
-          <div class="corner">${badge}</div>
+          <div class="corner"><span class="badge-wrap">${badge}</span>${sizeLabel ? `<div class="size-tag">${esc(sizeLabel)}</div>` : ""}</div>
           <div class="detail">
             <h4>${esc(it.title)}</h4>
-            <div class="sub">${esc(it.year || "")} · ${it.media_type} · ${it.torrents.length} torrent(s)</div>
+            <div class="sub">${esc(it.year || "")} · ${it.media_type} · ${it.torrents.length} torrent(s)${sizeLabel ? ` · ${esc(sizeLabel)}` : ""}</div>
             ${detailRows}
           </div>
           <div class="meta">
             <div class="title">${esc(it.title)}</div>
-            <div class="year">${esc(it.year || "")} · ${it.media_type}</div>
+            <div class="year">${esc(it.year || "")} · ${it.media_type}${sizeLabel ? ` · ${esc(sizeLabel)}` : ""}</div>
             <div class="tracker-rows">${rows}</div>
           </div>`;
         card.addEventListener("click", (e) => {
@@ -273,6 +292,7 @@
           if (selected.has(k)) { selected.delete(k); card.classList.remove("selected"); }
           else { selected.add(k); card.classList.add("selected"); }
           updateDeleteBtn();
+          updateSelectionSummary();
         });
         grid.appendChild(card);
       }
@@ -296,6 +316,17 @@
     function updateDeleteBtn() {
       deleteBtn.disabled = selected.size === 0;
       deleteBtn.textContent = selected.size ? `Delete selected (${selected.size})` : "Delete selected";
+      updateSelectionSummary();
+    }
+
+    // Sum of disk usage across selected items, shown next to the delete button.
+    function updateSelectionSummary() {
+      const el = document.getElementById("selectionSummary");
+      const sel = items.filter(i => selected.has(`${i.arr}:${i.arr_id}`));
+      const total = sel.reduce((acc, i) => acc + (Number(i.size_bytes) || 0), 0);
+      const label = fmtSize(total);
+      el.textContent = sel.length ? `${fmtSize(total) || "0 B"} to be freed` : "";
+      el.classList.toggle("on", sel.length > 0);
     }
 
     showStillSeeding.addEventListener("change", () => { savePrefs(); render(); });

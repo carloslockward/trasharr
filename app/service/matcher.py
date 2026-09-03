@@ -85,6 +85,7 @@ class MediaItem:
     year: int | None = None
     media_type: str = "movie"   # "movie" | "series"
     image_url: str | None = None
+    size_bytes: int = 0         # disk usage as reported by the arr (0 = unknown)
     torrents: list[TorrentDict] = field(default_factory=list)
     evaluations: list[SeedEvaluation] = field(default_factory=list)
     # True when the arr's grab history exists but no live torrent remains:
@@ -225,6 +226,19 @@ def _arr_poster(arr_rec: dict[str, Any], base_url: str) -> str | None:
     return None
 
 
+def _arr_size_bytes(arr_rec: dict[str, Any]) -> int:
+    """Disk usage reported by the arr: Radarr's ``sizeOnDisk`` or Sonarr's
+    ``statistics.sizeOnDisk``. 0 when the item has no files on disk."""
+    size = arr_rec.get("sizeOnDisk")
+    if size is None:
+        stats = arr_rec.get("statistics") or {}
+        size = stats.get("sizeOnDisk")
+    try:
+        return int(size or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _media_item(
     arr: str,
     arr_rec: dict[str, Any],
@@ -241,6 +255,7 @@ def _media_item(
         year=_year_of(arr_rec),
         media_type="series" if arr == "sonarr" else "movie",
         image_url=_arr_poster(arr_rec, base_url),
+        size_bytes=_arr_size_bytes(arr_rec),
         torrents=matched,
     )
     item.evaluations = [evaluate_torrent(qbt, t, config) for t in matched]

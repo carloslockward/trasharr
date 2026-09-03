@@ -63,6 +63,7 @@ def _to_json(item) -> dict[str, Any]:
         "year": item.year,
         "media_type": item.media_type,
         "image_url": item.image_url,
+        "size_bytes": item.size_bytes,
         "no_live_torrents": item.no_live_torrents,
         "torrents": torrents,
         "seeding_complete": item.seeding_complete,
