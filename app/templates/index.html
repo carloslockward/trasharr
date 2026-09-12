@@ -157,8 +157,11 @@
 
     // Sort key: the item's WORST torrent's seed time (the number shown on the
     // card's rollup), not the sum — a series with 18 episodes of the same age
-    // isn't "18x more seeded" than a single-torrent movie.
+    // isn't "18x more seeded" than a single-torrent movie. Items with no live
+    // torrents sort as Infinity so that descending (the default) puts them
+    // first: nothing is seeding, so they are the safest to clear.
     function maxSeedMinutes(it) {
+      if (it.no_live_torrents || !it.torrents.length) return Infinity;
       return it.torrents.reduce((acc, t) => Math.max(acc, Number(t.seeding_time_minutes) || 0), 0);
     }
 
