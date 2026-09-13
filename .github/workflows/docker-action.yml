@@ -7,12 +7,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: carloslockward/trasharr
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       packages: write
@@ -20,6 +19,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # QEMU lets buildx build the arm64 half of the image on the amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -45,6 +48,10 @@ jobs:
         with:
           context: .
           push: true
+          # Multi-platform: the registry then stores an OCI index (manifest
+          # list) instead of a single-arch manifest, which every registry
+          # client — including Unraid's update checker — can resolve.
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
