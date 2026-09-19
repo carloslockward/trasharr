@@ -35,9 +35,9 @@
     .card .poster { width:100%; aspect-ratio:2/3; background:#0d0f12; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:28px; overflow:hidden; border-radius:6px 6px 0 0; }
     .card.selected { border-color:#58a6ff; }
     .card .poster img { width:100%; height:100%; object-fit:cover; display:block; }
-    .card .meta { padding:8px 10px 10px; }
-    .card .title { font-size:12px; font-weight:600; line-height:1.25; }
-    .card .year { font-size:11px; color:var(--muted); margin-top:1px; }
+    .card .meta { padding:8px 10px 10px; min-width:0; }
+    .card .title { font-size:12px; font-weight:600; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .year { font-size:11px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     /* per-tracker rollup rows */
     .tracker-rows { margin-top:8px; display:flex; flex-direction:column; gap:5px; }
     .trow { font-size:10.5px; color:var(--muted); }
@@ -49,10 +49,10 @@
     .trow .pct { float:right; }
     .trow.ok .tname { color:#3fb950; }
     /* hover detail card */
-    .detail { display:none; position:absolute; z-index:30; top:0; left:calc(100% + 8px); width:320px; background:#171b21; border:1px solid #3a4150; border-radius:10px; padding:12px 14px; box-shadow:0 8px 28px rgba(0,0,0,.55); cursor:default; }
+    .detail { display:none; position:absolute; z-index:30; top:0; left:calc(100% + 8px); width:380px; background:#171b21; border:1px solid #3a4150; border-radius:10px; padding:12px 14px; box-shadow:0 8px 28px rgba(0,0,0,.55); cursor:default; }
     .card:hover .detail { display:block; }
-    .detail h4 { margin:0 0 8px; font-size:13px; }
-    .detail .sub { font-size:11px; color:var(--muted); margin-bottom:10px; }
+    .detail h4 { margin:0 0 8px; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .detail .sub { font-size:11px; color:var(--muted); margin-bottom:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .detail .drow { display:flex; justify-content:space-between; gap:10px; font-size:11px; padding:4px 0; border-bottom:1px solid #232933; }
     .detail .drow:last-child { border-bottom:none; }
     .detail .dname { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px; }
@@ -63,6 +63,7 @@
     .badge.ok { background:rgba(46,160,67,.18); color:#3fb950; }
     .badge.no { background:rgba(248,81,73,.18); color:#f85149; }
     .badge.warn { background:rgba(210,153,34,.18); color:#d29922; }
+    .badge.gray { background:rgba(139,148,163,.18); color:#8b94a3; }
     .card .corner { position:absolute; top:6px; left:6px; right:6px; z-index:5; display:flex; justify-content:space-between; align-items:flex-start; gap:4px; }
     /* status badge on the left, size on the right — same row, same height,
        and the row wraps nothing: long badge + size share one flex line */
@@ -70,6 +71,7 @@
     .card .corner .badge { white-space:nowrap; }
     .card .corner .size-tag { flex:none; }
     .card .size-tag { background:rgba(13,15,18,.85); color:#c9d1d9; font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; }
+    .card .orphan-note { color:var(--muted); font-size:11px; font-weight:600; text-align:center; line-height:1.4; padding:0 8px; }
     .selection-summary { font-size:13px; color:#58a6ff; font-weight:600; display:none; }
     .selection-summary.on { display:inline; }
     .btn { background:#2ea043; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; }
@@ -246,7 +248,7 @@
       for (const it of visible) {
         const card = document.createElement("div");
         card.className = "card";
-        card.dataset.key = `${it.arr}:${it.arr_id}`;
+        card.dataset.key = `${it.arr}:${it.arr_id}:${it.card_id || ""}`;
 
         const rollup = trackerRollup(it);
         const rows = rollup.map(r => {
@@ -269,15 +271,42 @@
           </div>`;
         }).join("");
 
-        const badge = it.safe_to_delete
-          ? '<span class="badge ok">safe to delete</span>'
-          : '<span class="badge warn">still seeding</span>';
+        const badge = it.orphan
+          ? '<span class="badge warn">orphan</span>'
+          : (it.leftover
+              ? '<span class="badge gray">no torrent</span>'
+              : (it.safe_to_delete
+                  ? '<span class="badge ok">safe to delete</span>'
+                  : '<span class="badge warn">still seeding</span>'));
 
+        const posterContent = it.orphan
+          ? '<div class="orphan-note">Not in<br>Sonarr/Radarr</div>'
+          : (it.image_url
+              ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${esc(it.title[0] || "?")}';this.remove()">`
+              : esc(it.title[0] || "?"));
         const sizeLabel = fmtSize(it.size_bytes);
+        if (it.leftover) {
+          // leftover card: no torrents — hover lists the arr-tracked files instead
+          const fileRows = (it.leftover_files || []).map((f) => `<div class="drow">
+            <span class="dname" title="${esc(f.path || "")}">${esc((f.path || "").split("/").pop() || "?")}</span>
+            <span class="dmeta">${fmtSize(f.size) || "?"}</span>
+          </div>`).join("");
+          card.innerHTML = `
+          <div class="poster">${posterContent}</div>
+          <div class="corner"><span class="badge-wrap">${badge}</span>${sizeLabel ? `<div class="size-tag">${esc(sizeLabel)}</div>` : ""}</div>
+          <div class="detail">
+            <h4>${esc(it.title)}</h4>
+            <div class="sub">${esc(it.year || "")} · ${it.media_type} · ${it.leftover_count} leftover file(s) — no torrent${sizeLabel ? ` · ${esc(sizeLabel)}` : ""}</div>
+            ${fileRows}
+          </div>
+          <div class="meta">
+            <div class="title">${esc(it.title)}</div>
+            <div class="year">${esc(it.year || "")} · ${it.media_type}${sizeLabel ? ` · ${esc(sizeLabel)}` : ""}</div>
+            <div class="tracker-rows"><div class="trow">no torrent — files left behind when the download was removed</div></div>
+          </div>`;
+        } else {
         card.innerHTML = `
-          <div class="poster">${it.image_url
-            ? `<img src="${esc(it.image_url)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${esc(it.title[0] || "?")}';this.remove()">`
-            : esc(it.title[0] || "?")}</div>
+          <div class="poster">${posterContent}</div>
           <div class="corner"><span class="badge-wrap">${badge}</span>${sizeLabel ? `<div class="size-tag">${esc(sizeLabel)}</div>` : ""}</div>
           <div class="detail">
             <h4>${esc(it.title)}</h4>
@@ -289,6 +318,7 @@
             <div class="year">${esc(it.year || "")} · ${it.media_type}${sizeLabel ? ` · ${esc(sizeLabel)}` : ""}</div>
             <div class="tracker-rows">${rows}</div>
           </div>`;
+        }
         card.addEventListener("click", (e) => {
           if (e.target.closest(".detail")) return; // clicking inside hover card doesn't select
           const k = card.dataset.key;
@@ -308,7 +338,7 @@
           const r = card.getBoundingClientRect();
           detail.style.left = "auto";
           detail.style.right = "auto";
-          if (r.right + 336 > window.innerWidth) detail.style.right = "calc(100% + 8px)";
+          if (r.right + 396 > window.innerWidth) detail.style.right = "calc(100% + 8px)";
           else detail.style.left = "calc(100% + 8px)";
         }
       };
@@ -325,7 +355,7 @@
     // Sum of disk usage across selected items, shown next to the delete button.
     function updateSelectionSummary() {
       const el = document.getElementById("selectionSummary");
-      const sel = items.filter(i => selected.has(`${i.arr}:${i.arr_id}`));
+      const sel = items.filter(i => selected.has(`${i.arr}:${i.arr_id}:${i.card_id || ""}`));
       const total = sel.reduce((acc, i) => acc + (Number(i.size_bytes) || 0), 0);
       const label = fmtSize(total);
       el.textContent = sel.length ? `${fmtSize(total) || "0 B"} to be freed` : "";
@@ -343,14 +373,14 @@
 
     deleteBtn.addEventListener("click", async () => {
       const selection = items
-        .filter(i => selected.has(`${i.arr}:${i.arr_id}`))
-        .map(i => ({ arr: i.arr, arr_id: i.arr_id }));
+        .filter(i => selected.has(`${i.arr}:${i.arr_id}:${i.card_id || ""}`))
+        .map(i => ({ arr: i.arr, arr_id: i.arr_id, card_id: i.card_id || "" }));
       const ok = confirm("Delete selected content?\n\nThis removes media files, unmonitors on the arr, and removes the torrents (including cross-seed copies).");
       if (!ok) return;
       // Extra warning when any selected item has not met its seed requirements.
       // Accepting it sets force=true so the server-side gate doesn't refuse.
       let force = false;
-      const unmet = items.filter(i => selected.has(`${i.arr}:${i.arr_id}`) && !i.safe_to_delete);
+      const unmet = items.filter(i => selected.has(`${i.arr}:${i.arr_id}:${i.card_id || ""}`) && !i.safe_to_delete);
       if (unmet.length) {
         const names = unmet.map(i => i.title).join(", ");
         force = confirm(

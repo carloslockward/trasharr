@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .base import ApiError, BaseClient, REQUEST_TIMEOUT
+from .base import REQUEST_TIMEOUT, ApiError, BaseClient
 
 logger = logging.getLogger(__name__)
 

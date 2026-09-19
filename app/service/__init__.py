@@ -1,17 +1,17 @@
 """Service layer: matching, safety evaluation, and the delete contract."""
 
-from .matcher import build_index, evaluate_torrent, MediaItem, SeedEvaluation
-from .delete import DeleteCoordinator, DeletionResult, DeletionRefused
+from .delete import DeleteCoordinator, DeletionRefused, DeletionResult
 from .library import load_items, make_clients
+from .matcher import MediaItem, SeedEvaluation, build_index, evaluate_torrent
 
 __all__ = [
-    "build_index",
-    "evaluate_torrent",
+    "DeleteCoordinator",
+    "DeletionRefused",
+    "DeletionResult",
     "MediaItem",
     "SeedEvaluation",
-    "DeleteCoordinator",
-    "DeletionResult",
-    "DeletionRefused",
+    "build_index",
+    "evaluate_torrent",
     "load_items",
     "make_clients",
 ]

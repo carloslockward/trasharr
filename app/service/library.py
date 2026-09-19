@@ -8,16 +8,15 @@ and returns the list of MediaItems. It is the single entry point the web layer
 from __future__ import annotations
 
 import logging
+from typing import TypedDict
 
-from typing import Optional, TypedDict
-
-from ..config import Config
 from ..clients import (
-    QBittorrentClient,
-    SonarrClient,
-    RadarrClient,
     ProwlarrClient,
+    QBittorrentClient,
+    RadarrClient,
+    SonarrClient,
 )
+from ..config import Config
 from .matcher import MediaItem, build_index
 
 logger = logging.getLogger(__name__)
@@ -62,9 +61,9 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
     """
     diag: list[str] = []
     clients = clients or make_clients(config)
-    qbt: Optional[QBittorrentClient] = clients.get("qbt")
-    sonarr: Optional[SonarrClient] = clients.get("sonarr")
-    radarr: Optional[RadarrClient] = clients.get("radarr")
+    qbt: QBittorrentClient | None = clients.get("qbt")
+    sonarr: SonarrClient | None = clients.get("sonarr")
+    radarr: RadarrClient | None = clients.get("radarr")
 
     if not qbt:
         diag.append("qBittorrent is not enabled or has no base URL set.")
@@ -82,11 +81,13 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
         radarr_history: list = []
         radarr_movies: list = []
         sonarr_series: list = []
+        sonarr_ok = radarr_ok = False
 
         if sonarr:
             try:
                 sonarr_history = sonarr.history(event_type=1)
                 sonarr_series = sonarr.series()
+                sonarr_ok = True
                 diag.append(f"Sonarr: {len(sonarr_series)} series, {len(sonarr_history)} grab records.")
             except Exception as exc:
                 diag.append(f"Sonarr fetch failed: {exc}")
@@ -94,9 +95,16 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
             try:
                 radarr_history = radarr.history(event_type=1)
                 radarr_movies = radarr.movies()
+                radarr_ok = True
                 diag.append(f"Radarr: {len(radarr_movies)} movies, {len(radarr_history)} grab records.")
             except Exception as exc:
                 diag.append(f"Radarr fetch failed: {exc}")
+
+        # Orphan detection must only run with COMPLETE history: if an arr fetch
+        # failed, its missing records would mislabel live torrents as orphans.
+        orphan_detection = sonarr_ok and radarr_ok
+        if not orphan_detection:
+            diag.append("Orphan detection disabled: an arr history fetch failed.")
 
         items = build_index(
             qbt=qbt,
@@ -107,6 +115,9 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
             sonarr_series=sonarr_series,
             radarr_base_url=(config.service("radarr").get("base_url") or ""),
             sonarr_base_url=(config.service("sonarr").get("base_url") or ""),
+            orphan_detection=orphan_detection,
+            sonarr=sonarr if sonarr_ok else None,
+            radarr=radarr if radarr_ok else None,
         )
         diag.append(f"Matched {len(items)} item(s) to live torrents.")
         return items, diag

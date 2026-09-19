@@ -3,7 +3,7 @@
 The web UI is small and self-contained:
 
 * ``GET /``            the list page (poster grid, filtering, delete button)
-* ``GET /api/library`` JSON of the current watched items + seeding status
+* ``GET /api/library`` JSON of the current file-set cards + seeding status
 * ``POST /api/delete`` the delete action (the only mutating endpoint)
 * ``GET /settings``    the settings page (services + per-tracker limits)
 * ``POST /settings``   save service configuration
@@ -11,7 +11,8 @@ The web UI is small and self-contained:
 
 Deleting is destructive, so it is a separate POST to a dedicated endpoint and
 every returned item is re-verified server-side before anything is removed
-(the DeleteCoordinator refuses if any torrent is not seeding-complete).
+(the DeleteCoordinator refuses unless every hosting torrent is
+seeding-complete, and deletes arr files per-file, never item-level).
 """
 
 from __future__ import annotations
@@ -19,7 +20,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
 from ..service import (
     DeleteCoordinator,
@@ -59,12 +68,16 @@ def _to_json(item) -> dict[str, Any]:
     return {
         "arr": item.arr,
         "arr_id": item.arr_id,
+        "card_id": item.card_id,
         "title": item.title,
         "year": item.year,
         "media_type": item.media_type,
         "image_url": item.image_url,
         "size_bytes": item.size_bytes,
         "no_live_torrents": item.no_live_torrents,
+        "orphan": item.orphan,
+        "leftover": bool(item.leftover_files),
+        "leftover_count": len(item.leftover_files),
         "torrents": torrents,
         "seeding_complete": item.seeding_complete,
         "safe_to_delete": item.safe_to_delete,
@@ -110,8 +123,15 @@ def api_delete():
         # Rebuild the full index so we can look up the real MediaItems server-side
         # rather than trusting the client-supplied ids.
         items, _diag = load_items(config, clients)
-        items = {f"{i.arr}:{i.arr_id}": i for i in items}
-        selected = [items[f"{s['arr']}:{s['arr_id']}"] for s in selections if f"{s['arr']}:{s['arr_id']}" in items]
+        by_key = {}
+        for i in items:
+            by_key[f"{i.arr}:{i.arr_id}:{i.card_id}"] = i
+            by_key.setdefault(f"{i.arr}:{i.arr_id}", i)
+        selected = []
+        for s in selections:
+            key = f"{s['arr']}:{s['arr_id']}:{s.get('card_id', '')}" if s.get('card_id') else f"{s['arr']}:{s['arr_id']}"
+            if key in by_key:
+                selected.append(by_key[key])
     except Exception as exc:
         logger.exception("could not rebuild index for delete")
         return jsonify({"ok": False, "error": str(exc)}), 500

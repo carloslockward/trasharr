@@ -1,97 +1,57 @@
 # trasharr
 
-trasharr is a small web app for the media-automation stack (Sonarr, Radarr, Prowlarr,
-qBittorrent) that lets you safely reclaim disk space by deleting content whose torrents
-have met their tracker's seeding requirements.
+trasharr is a small web app for the Sonarr + Radarr + qBittorrent media stack that
+shows you exactly which movies and shows are safe to delete — and deletes them for
+you in one click — so you can reclaim disk space without ever breaking a private
+tracker's seeding rules.
 
-The problem trasharr solves: private trackers require a minimum seed ratio / seed time,
-and you want to keep seeding past the minimum to maintain an overall ratio above 1.0.
-That means qBittorrent is configured to seed forever and never stop on its own. trasharr
-is then the tool that decides what is safe to delete: it lists every movie/series whose
-torrents have met their per-tracker limits — and you pick what you have watched
-yourself.
+## The problem it solves
 
-## Features
+Private trackers require a minimum seed ratio or seed time before you may stop
+seeding. To stay above an overall 1.0 ratio you have qBittorrent set to a minimum 
+ammount of time and or ratio, which means watched content can acumulate and quietly 
+fill your disk. trasharr keeps score for you: for every item it compares each torrent's 
+ratio and seed time against the limits of its tracker, and flags what has paid its dues.
 
-- Lists every movie/series in Sonarr/Radarr that still has live torrents in qBittorrent,
-  with per-tracker progress bars showing ratio / seed time against the tracker's targets.
-- **Disk usage per item**: every card shows how much storage the movie/series occupies
-  (as reported by the arr, so it works even when the torrent is already gone), and
-  selecting items shows a running total of what you are about to free.
-- Items whose torrents are already gone still appear (from the arr grab history) and
-  are trivially safe to delete — the remaining work is just removing them from the arr.
-- One-click delete removes an item everywhere it lives:
-  1. Verifies every hosting torrent (including cross-seed copies sharing the same
-     content) has met its tracker's requirement — refuses otherwise
-  2. Unmonitors the item in Sonarr/Radarr (so it is not re-grabbed)
-  3. Deletes the media files through the arr (removes the item from the arr's library)
-  4. Removes the torrent(s) from qBittorrent with files
-- **Cross-seed awareness**: torrents tagged with the cross-seed tag were never
-  downloaded from their tracker (the data was grabbed once via the original torrent),
-  so their seeding limits don't apply — they always count as complete.
-- **Dry-run mode** (`TRASHARR_DRY_RUN=1`): the entire delete contract runs and logs
-  exactly what it *would* do — including which cross-seed siblings would be removed and
-  which torrents fail the requirements — without touching anything.
-- **Forced deletes**: deleting an item whose requirements are not met triggers an extra
-  confirmation and then proceeds by explicit user override (logged on the server).
-- Matching is exact, not fuzzy: the arr grab history records the qBittorrent torrent
-  hash, so trasharr maps torrents to media items by `downloadId`, never by title
-  guessing.
-- Per-tracker seeding limits configured in a JSON file (ratio and/or seed time), not
-  enforced by Prowlarr or qBittorrent.
-- Tracker discovery: the settings page offers a dropdown of every tracker domain seen
-  on live torrents, so adding a new tracker is one click.
-- Fast UI: the library is cached in the browser (navigating to Settings and back is
-  instant), with a refresh button, sort by name / seed time / size (direction toggle),
-  and a hover card showing every torrent behind a show.
+## What you get
 
-## Why?
+- **A poster grid of everything currently on disk**, with a per-tracker progress bar
+  on each card showing how close a torrent is to its ratio / seed-time target.
+- **Green means safe**: once every torrent on a card has met its tracker's limits,
+  the card is marked *safe to delete*. One toggle shows the not-yet-finished ones too.
+- **Real disk usage per card** — including hardlinked cross-seed copies, which count
+  once, not twice. Selecting cards shows a running "to be freed" total.
+- **Leftovers included**: files whose torrent is long gone (a season you deleted
+  before trasharr existed) still appear, marked *no torrent*, and can be deleted.
+  Stray cross-seed copies that outlived their original show up as orphans.
+- **One-click delete that refuses to be unsafe.** Deleting verifies every torrent,
+  removes only the exact files that belong to that card, stops the arr from
+  re-downloading, and removes the torrents — including their cross-seed copies.
+  If anything hasn't met its tracker's rules, the delete is refused (you can force
+  it through an explicit extra confirmation).
+- **Cross-seed aware**: copies created by the cross-seed tool share the same file on
+  disk and were never downloaded from their tracker, so they don't add seeding
+  requirements and are deleted together with the original.
+- **Dry-run mode**: set `TRASHARR_DRY_RUN=1` and every delete performs its full
+  checks and logs exactly what it *would* do — touching nothing. Do this first.
+- **Friendly settings page**: per-tracker limits (ratio and/or seed time) with a
+  dropdown of trackers auto-discovered from your torrents; browser-cached grid,
+  sorting by name / seed time / size, and a hover card with the details behind
+  each poster.
 
-Private trackers require you to seed for a minimum ratio or time before you can delete.
-Meanwhile, content sits on disk seeding longer than required — which is good for your
-ratio but bad for your free space. trasharr shows you exactly which items are free to
-delete (seeding requirement met) so you can reclaim space without ever risking a tracker
-ratio/time violation.
+## How it works
 
-## Architecture
+trasharr reads Sonarr's and Radarr's grab history to map torrents to media by
+torrent hash — no title guessing — and physically identifies files on disk
+(following hardlinks) so copies of the same data always share one card and one
+delete. All configuration lives in a JSON file: service endpoints and API keys,
+per-tracker seed limits (met when **either** ratio **or** seed time reaches its
+target; unused axis = 0; unconfigured trackers count as complete), and the
+cross-seed tag. See `config.example.json` to start.
 
-```
-app/
-  __init__.py      Flask application factory
-  config.py        JSON configuration (endpoints, API keys, per-tracker seed limits)
-  clients/
-    qbittorrent.py qBittorrent Web UI API v2 (API-key or cookie auth)
-    sonarr.py      Sonarr API v3
-    radarr.py      Radarr API v3
-    prowlarr.py    Prowlarr API v1 (tracker discovery; reserved)
-  service/
-    matcher.py     torrent <-> media item matching, seeding-complete evaluation,
-                   tracker-domain discovery, on-disk size extraction
-    library.py     assembles the library from the configured services
-    delete.py      the delete contract (verify -> unmonitor -> arr deleteFiles -> qBit remove)
-  web/
-    routes.py      Flask routes (index list, API, delete, settings, tracker limits)
-  templates/       index (poster grid) + settings pages — no build step, vanilla JS
-```
+## Running
 
-## Configuration
-
-trasharr stores all configuration in a JSON file (`config.json` by default, path
-overridable via the `TRASHARR_CONFIG` environment variable). It holds:
-
-- qBittorrent, Sonarr, Radarr, and Prowlarr endpoints + API keys
-- Per-tracker seeding limits (ratio and/or seed time), keyed by tracker domain
-  (as seen on the torrent, e.g. `tracker.digitalcore.club`)
-- The qBittorrent tag that marks cross-seed copies (default `cross-seed`)
-
-A tracker requirement is met when **either** axis is satisfied: ratio >= target OR seed
-time >= target. Set an unused axis to 0. A tracker with no configured requirement is
-treated as complete.
-
-The `config.json` file holds API keys and seed limits, so it is git-ignored. A
-`config.example.json` with placeholder values is provided as a starting point.
-
-## Running locally
+Locally:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -100,19 +60,7 @@ cp config.example.json config.json   # then edit
 python run.py                        # dev server at http://localhost:5000
 ```
 
-### Dry-run mode
-
-Before trusting trasharr with real deletes, exercise the whole flow safely:
-
-```bash
-TRASHARR_DRY_RUN=1 python run.py
-```
-
-Every delete performs the full verification and logs its complete intent (items,
-cross-seed siblings, torrents that fail the gate) but performs no destructive call. The
-UI labels the result "DRY RUN — nothing deleted."
-
-## Running with Docker
+With Docker:
 
 ```bash
 docker build -t trasharr .
@@ -132,15 +80,6 @@ On Unraid, add a container with:
 
 [Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/)
 
-## Credits
-
-trasharr by @carloslockward
-
-Uses:
-
-- [Flask](https://flask.palletsprojects.com/)
-- Sonarr, Radarr, Prowlarr, qBittorrent APIs
-
 ---
 
-#### Contributions and bug reports welcome!
+#### Contributions and bug reports welcome! trasharr by @carloslockward

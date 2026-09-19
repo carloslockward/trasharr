@@ -63,8 +63,15 @@
       </div>
       {% endfor %}
 
-      <div class="row"><label>cross-seed tag</label><input type="text" name="cross_seed_tag" value="{{ config.data['cross_seed_tag'] }}"></div>
-      <div class="row"><button class="btn" type="submit">Save service settings</button></div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="row">
+          <label>cross-seed tag</label>
+          <input type="text" name="cross_seed_tag" value="{{ config.data['cross_seed_tag'] }}">
+        </div>
+        <p class="hint">Torrents carrying this tag in qBittorrent are treated as cross-seed copies: they share the same file on disk as the original and their tracker's seeding limits don't apply.</p>
+      </div>
+
+      <div class="row" style="margin-top:16px"><button class="btn" type="submit">Save service settings</button></div>
     </form>
 
     <h2>Per-tracker seeding limits</h2>

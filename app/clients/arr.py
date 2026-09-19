@@ -50,7 +50,11 @@ class ArrrClient(BaseClient):
         self.put(f"/api/v3/{self._resource()}/{item_id}", json=item)
 
     def delete_files(self, item_id: int) -> None:
-        """Delete the item's files through the arr (keeps DB + metadata intact)."""
+        """Delete the item's files through the arr (keeps DB + metadata intact).
+
+        DANGEROUS at item level: removes EVERY file of the movie/series. The
+        delete contract uses per-file deletion (delete_media_file) instead.
+        """
         self.delete(f"/api/v3/{self._resource()}/{item_id}", params={"deleteFiles": "true"})
 
     def put(self, path: str, **kwargs):
