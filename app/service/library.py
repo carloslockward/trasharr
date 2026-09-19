@@ -85,18 +85,21 @@ def load_items(config: Config, clients: ClientBundle | None = None) -> tuple[lis
 
         if sonarr:
             try:
-                sonarr_history = sonarr.history(event_type=1)
+                # Full history (all event types): grab events are pruned by the
+                # arr's history cleanup, but import events survive and carry
+                # the same downloadId + series/movie id — both are evidence.
+                sonarr_history = sonarr.history()
                 sonarr_series = sonarr.series()
                 sonarr_ok = True
-                diag.append(f"Sonarr: {len(sonarr_series)} series, {len(sonarr_history)} grab records.")
+                diag.append(f"Sonarr: {len(sonarr_series)} series, {len(sonarr_history)} history records.")
             except Exception as exc:
                 diag.append(f"Sonarr fetch failed: {exc}")
         if radarr:
             try:
-                radarr_history = radarr.history(event_type=1)
+                radarr_history = radarr.history()
                 radarr_movies = radarr.movies()
                 radarr_ok = True
-                diag.append(f"Radarr: {len(radarr_movies)} movies, {len(radarr_history)} grab records.")
+                diag.append(f"Radarr: {len(radarr_movies)} movies, {len(radarr_history)} history records.")
             except Exception as exc:
                 diag.append(f"Radarr fetch failed: {exc}")
 

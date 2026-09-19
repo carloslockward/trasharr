@@ -15,10 +15,13 @@ class ArrrClient(BaseClient):
     EVENT_GRAB = 1
 
     def history(self, event_type: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
-        """Fetch grab/download history, paginated.
+        """Fetch history, paginated.
 
-        Returns raw records. Each grab record carries ``downloadId`` (the
-        torrent hash) which is how trasharr matches torrents to media items.
+        Returns raw records of all event types (grabbed, imported, …). Each
+        carries ``downloadId`` — the qBittorrent torrent hash — which is how
+        trasharr matches torrents to media items. Import events matter as
+        much as grabs: grabs are pruned by the arr's history cleanup, but
+        imports survive.
         """
         records: list[dict[str, Any]] = []
         page = 1
