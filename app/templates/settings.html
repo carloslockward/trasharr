@@ -27,6 +27,8 @@
     th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
     th { color:var(--muted); font-weight:600; }
     .hint { font-size:12px; color:var(--muted); margin-top:-4px; }
+    .subtle-link { font-size:12px; color:var(--muted); text-decoration:none; }
+    .subtle-link:hover { color:var(--text); }
     .flash { background:rgba(46,160,67,.12); color:#3fb950; padding:8px 12px; border-radius:6px; margin-bottom:16px; }
   </style>
 </head>
@@ -112,6 +114,16 @@
 
     <h2>Configuration file</h2>
     <p class="hint">{{ config.path }} — API keys and limits live in this JSON, which is git-ignored.</p>
+
+    <h2>About</h2>
+    <div class="card">
+      <div class="row">
+        <label>Version</label>
+        <span style="font-size:13px">v{{ version }}</span>
+        <a class="subtle-link" href="https://github.com/carloslockward/trasharr/releases" target="_blank" rel="noopener">Releases ↗</a>
+      </div>
+      <p class="hint">trasharr shows which of your Sonarr/Radarr downloads have met their seeding requirements and can be safely deleted.</p>
+    </div>
   </div>
   <script>
     // Single Edit/Save/Cancel toggle over the tracker table. The rows are plain

@@ -579,8 +579,8 @@ def build_index(
                 t["_xseed_fs"] = True
         linked = len(g) > 1 and any("_xseed_fs" in t for t in g)
         if linked:
-            logger.info("file-set merged: %d torrent(s) share physical files (%s)",
-                        len(g), g[0].get("name"))
+            logger.debug("file-set merged: %d torrent(s) share physical files (%s)",
+                         len(g), g[0].get("name"))
 
     # 2. One card per group, resolved to its media when possible.
     items: list[MediaItem] = []
@@ -597,9 +597,13 @@ def build_index(
                 # The arr item was deleted since the grab (e.g. by a previous
                 # card's delete). Fall back to the torrent's own name.
                 rec = {"title": str(group[0].get("name") or "Unknown")}
-            items.append(_file_set_card(arr, rid, rec, group, qbt, config,
-                                        radarr_base_url, sonarr_base_url,
-                                        card_id=card_id))
+            item = _file_set_card(arr, rid, rec, group, qbt, config,
+                                  radarr_base_url, sonarr_base_url,
+                                  card_id=card_id)
+            items.append(item)
+            logger.debug("card %s: torrent-backed %s:%s '%s' (%d torrent(s), %.1f GB)",
+                         card_id, arr, rid, rec.get("title"), len(group),
+                         (item.size_bytes or 0) / 1e9)
             continue
 
         # No history hash in this group (cross-seed copy or orphan): resolve
@@ -620,8 +624,14 @@ def build_index(
                 items.append(_file_set_card(arr, rid, rec, group, qbt, config,
                                             radarr_base_url, sonarr_base_url,
                                             resolved_by_name=True, card_id=card_id))
+                logger.debug("card %s: name-resolved %s:%s '%s' (%d torrent(s), %.1f GB)",
+                             card_id, arr, rid, rec.get("title"), len(group),
+                             (items[-1].size_bytes or 0) / 1e9)
                 continue
         items.append(_orphan_file_set(group, qbt, config))
+        logger.debug("card %s: orphan '%s' (%d torrent(s), %.1f GB)",
+                     card_id, group[0].get("name"), len(group),
+                     (items[-1].size_bytes or 0) / 1e9)
 
     # 3. Arr items whose grabbed torrents are all gone: nothing seeding, but
     # the arr still holds the library entry (files may or may not exist).
@@ -645,6 +655,8 @@ def build_index(
                 items.append(_media_item(arr, rec,
                                          radarr_base_url if arr == "radarr" else sonarr_base_url,
                                          [], qbt, config, seeding_complete=True))
+                logger.debug("card: no-live-torrent %s:%s '%s' (history evidence)",
+                             arr, rid, rec.get("title"))
     else:
         # Arr fetch failed: simple catalog fallback (no orphan logic at all).
         for rec in radarr_movies:
@@ -658,6 +670,9 @@ def build_index(
     # they become deletable. Uses the same inode/basename/size matching in
     # reverse: any tracked file no torrent card covers is a leftover. Runs
     # best-effort: an arr file-listing failure skips that media silently.
+    # Every media in the arr catalog is scanned — not just media that already
+    # has a card — otherwise a movie/series with no torrent at all would never
+    # enter this loop and its leftover files would stay invisible.
     if orphan_detection:
         media_cards: dict[tuple[str, int], list[MediaItem]] = {}
         for it in items:
@@ -666,7 +681,12 @@ def build_index(
         catalogs: dict[str, dict[int, dict[str, Any]]] = {
             "radarr": radarr_by_id, "sonarr": sonarr_by_id}
         clients: dict[str, Any] = {"radarr": radarr, "sonarr": sonarr}
-        for (arr, rid), cards in media_cards.items():
+        all_media: set[tuple[str, int]] = set(media_cards)
+        for cat in (radarr_by_id, sonarr_by_id):
+            for rid, rec in cat.items():
+                arr = "radarr" if cat is radarr_by_id else "sonarr"
+                all_media.add((arr, int(rid)))
+        for (arr, rid) in sorted(all_media):
             client = clients.get(arr)
             if client is None:
                 continue
@@ -680,14 +700,29 @@ def build_index(
                             arr, rid, exc)
                 continue
             if not arr_files:
+                logger.debug("leftover scan %s:%s '%s': arr tracks 0 files",
+                             arr, rid, rec.get("title"))
                 continue
             identity = card_file_identity(
-                [t for c in cards for t in c.torrents], qbt)
+                [t for c in media_cards.get((arr, rid), []) for t in c.torrents], qbt)
             covered_ids = {int(f.get("id") or 0) for f in match_arr_files(arr_files, identity)}
             uncovered = [f for f in arr_files if int(f.get("id") or 0) not in covered_ids]
+            logger.debug("leftover scan %s:%s '%s': %d arr file(s), %d covered, %d uncovered",
+                         arr, rid, rec.get("title"), len(arr_files),
+                         len(covered_ids), len(uncovered))
             if uncovered:
                 items.append(_leftover_card(arr, int(rid), rec, uncovered,
                                             radarr_base_url if arr == "radarr" else sonarr_base_url))
+
+    kind_count: dict[str, int] = {}
+    for it in items:
+        kind = ("leftover" if it.leftover_files
+                else "orphan" if it.orphan
+                else "torrent-backed" if it.torrents
+                else "no-live-torrent")
+        kind_count[kind] = kind_count.get(kind, 0) + 1
+    logger.debug("build_index: %d card(s) — %s", len(items),
+                 ", ".join(f"{v} {k}" for k, v in sorted(kind_count.items())))
 
     return items
 

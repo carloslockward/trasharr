@@ -11,15 +11,28 @@ from .config import Config
 
 logger = logging.getLogger(__name__)
 
+__version__ = "1.1.1"
+
 CONFIG_DIR = os.environ.get("TRASHARR_CONFIG_DIR", os.getcwd())
 
-# Verbose enough to show the dry-run / delete intent logs on the console
-# (delete.py logs at INFO), including the Flask request line.
-logging.basicConfig(
-    level=os.environ.get("TRASHARR_LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# One shared configuration: every module logs via logging.getLogger(__name__)
+# under the "trasharr" package, and this parent logger carries the level and
+# stream handler for all of them.
+def _setup_logging() -> None:
+    if logger.handlers:  # module re-import / app factory called twice
+        return
+    level_name = os.environ.get("TRASHARR_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        level = logging.INFO
+    logger.setLevel(level)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(handler)
+    if level_name not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        logger.warning("unknown LOG_LEVEL %r — falling back to INFO", level_name)
 
+_setup_logging()
 
 def create_app() -> Flask:
     app = Flask(__name__)

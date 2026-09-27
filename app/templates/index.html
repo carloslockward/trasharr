@@ -239,7 +239,7 @@
       updateDeleteBtn();
       const visible = sortVisible(items.filter(i => showStillSeeding.checked || i.safe_to_delete));
       grid.innerHTML = "";
-      count.textContent = `${visible.length} shown / ${items.length} with torrents`;
+      count.textContent = `${visible.length} shown / ${items.length} total`;
       if (!visible.length) {
         const diagHtml = (diagnostics.length ? `<ul>${diagnostics.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : "");
         grid.innerHTML = `<div class="empty"><div>No matching content.</div>${diagHtml}</div>`;

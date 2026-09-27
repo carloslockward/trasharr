@@ -30,6 +30,7 @@ from flask import (
     url_for,
 )
 
+from .. import __version__
 from ..service import (
     DeleteCoordinator,
     DeletionResult,
@@ -182,7 +183,7 @@ def settings():
         config.save()
         return redirect(url_for("trasharr.settings"))
 
-    return render_template("settings.html", config=config)
+    return render_template("settings.html", config=config, version=__version__)
 
 
 @bp.route("/api/trackers/discovered")
