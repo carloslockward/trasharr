@@ -22,6 +22,11 @@ atomic-looking sequence through the source services:
                   on disk.
     5. REMOVE   — delete every qBit torrent hosting the files (the arr-hash
                   torrent plus its hardlinked copies).
+    6. PURGE    — when NO tracked file remains (the whole media is gone,
+                  every season/movie), remove the series/movie from the arr
+                  DB entirely (deleteFiles=false — files were handled in
+                  step 3, download copies in step 5). Partial deletes (some
+                  seasons still tracked) never reach this step.
 
 LEFTOVER FILES — a third, simpler contract for arr-tracked files whose
 torrents are long gone (e.g. a season deleted before trasharr existed): the
@@ -192,6 +197,17 @@ class DeleteCoordinator:
                     arr.unmonitor(item.arr_id)
                     logger.debug("%sremoved '%s' from monitoring (radarr, id=%s)", prefix, item.title, item.arr_id)
                     steps.append(f"unmonitored radarr:{item.arr_id}")
+            # PURGE — no tracked file remains (leftover files were ALL of the
+            # media's tracked files), so remove the arr DB entry as well.
+            if dry:
+                logger.debug("%swould delete %s item id=%s (%s) from the arr database",
+                             prefix, item.arr, item.arr_id, item.title)
+                steps.append(f"[dry-run] would delete {item.arr} item id={item.arr_id}")
+            else:
+                arr.delete_item(item.arr_id)
+                logger.debug("%sdeleted %s item id=%s (%s) from the arr database",
+                             prefix, item.arr, item.arr_id, item.title)
+                steps.append(f"deleted {item.arr} item id={item.arr_id}")
         else:
             logger.debug("%s%d tracked file(s) remain for '%s' — leaving it monitored", prefix, len(remaining), item.title)
             steps.append(f"{len(remaining)} file(s) remain — kept monitored")
@@ -327,7 +343,7 @@ class DeleteCoordinator:
                             steps.append(f"[dry-run] would unmonitor {len(episode_ids)} episode(s)")
                         else:
                             arr.set_episode_monitor(episode_ids, False)
-                            logger.debug("%sunmonitored %d sonarr episode(s): %s", prefix, len(episode_ids), episode_ids)
+                            logger.debug("%sunmonitored %d sonarr episode(s) of '%s'", prefix, len(episode_ids), item.title)
                             steps.append(f"unmonitored {len(episode_ids)} episode(s)")
                     else:
                         if dry:
@@ -337,6 +353,17 @@ class DeleteCoordinator:
                             arr.unmonitor(item.arr_id)
                             logger.debug("%sremoved '%s' from monitoring (radarr, id=%s)", prefix, item.title, item.arr_id)
                             steps.append(f"unmonitored radarr:{item.arr_id}")
+                    # 6. PURGE — nothing tracked remains anywhere for this
+                    # media (every season/movie), so remove the arr DB entry.
+                    if dry:
+                        logger.debug("%swould delete %s item id=%s (%s) from the arr database",
+                                     prefix, item.arr, item.arr_id, item.title)
+                        steps.append(f"[dry-run] would delete {item.arr} item id={item.arr_id}")
+                    else:
+                        arr.delete_item(item.arr_id)
+                        logger.debug("%sdeleted %s item id=%s (%s) from the arr database",
+                                     prefix, item.arr, item.arr_id, item.title)
+                        steps.append(f"deleted {item.arr} item id={item.arr_id}")
                 else:
                     logger.debug("%s%d tracked file(s) remain for '%s' — leaving it monitored", prefix,
                         len(remaining), item.title)
