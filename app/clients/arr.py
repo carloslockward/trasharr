@@ -60,6 +60,15 @@ class ArrrClient(BaseClient):
         """
         self.delete(f"/api/v3/{self._resource()}/{item_id}", params={"deleteFiles": "true"})
 
+    def delete_item(self, item_id: int) -> None:
+        """Remove the series/movie from the arr DB entirely.
+
+        ``deleteFiles=false``: file removal already happened via per-file
+        deletes, and download-dir copies are handled by qBittorrent. Only
+        called by the contract when NO tracked file remains for the media.
+        """
+        self.delete(f"/api/v3/{self._resource()}/{item_id}", params={"deleteFiles": "false"})
+
     def put(self, path: str, **kwargs):
         return self._request("PUT", path, **kwargs)
 
